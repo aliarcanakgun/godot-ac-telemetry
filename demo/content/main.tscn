@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://dofp3hyywitc0"]
+
+[ext_resource type="Script" uid="uid://cd0j5lv7ntj5j" path="res://content/main.gd" id="1_yqvsc"]
+
+[node name="main" type="Node" unique_id=802462492]
+script = ExtResource("1_yqvsc")
+
+[node name="ACTelemetry" type="ACTelemetry" parent="." unique_id=285519553]

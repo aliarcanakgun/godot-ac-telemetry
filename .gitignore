@@ -1,0 +1,14 @@
+# C++/Scons specific
+.sconsign.dblite
+.scons_cache/
+*.obj
+*.os
+*.o
+*.pyc
+
+# Compiled Binaries
+demo/addons/ac-telemetry/bin/*
+!demo/addons/ac-telemetry/bin/*.gdextension
+
+# Development Files
+demo/last_session_data.bin

@@ -1,0 +1,167 @@
+#pragma once
+
+#include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/variant/string.hpp>
+#include <windows.h>
+#include <vector>
+
+namespace godot {
+
+    // assetto corsa status and types
+    typedef int AC_STATUS;
+    #define AC_OFF 0
+    #define AC_REPLAY 1
+    #define AC_LIVE 2
+    #define AC_PAUSE 3
+
+    typedef int AC_SESSION_TYPE;
+    #define AC_UNKNOWN -1
+    #define AC_PRACTICE 0
+    #define AC_QUALIFY 1
+    #define AC_RACE 2
+    #define AC_HOTLAP 3
+    #define AC_TIME_ATTACK 4
+    #define AC_DRIFT 5
+    #define AC_DRAG 6
+
+    typedef int AC_FLAG_TYPE;
+    #define AC_NO_FLAG 0
+    #define AC_BLUE_FLAG 1
+    #define AC_YELLOW_FLAG 2
+    #define AC_BLACK_FLAG 3
+    #define AC_WHITE_FLAG 4
+    #define AC_CHECKERED_FLAG 5
+    #define AC_PENALTY_FLAG 6
+
+    // ensure 4-byte alignment to match assetto corsa memory layout
+    #pragma pack(push, 4)
+
+    struct SPagePhysics {
+        int packetId = 0;
+        float gas = 0;
+        float brake = 0;
+        float fuel = 0;
+        int gear = 0;
+        int rpms = 0;
+        float steerAngle = 0;
+        float speedKmh = 0;
+        float velocity[3];
+        float accG[3];
+        float wheelSlip[4];
+        float wheelLoad[4];
+        float wheelsPressure[4];
+        float wheelAngularSpeed[4];
+        float tyreWear[4];
+        float tyreDirtyLevel[4];
+        float tyreCoreTemperature[4];
+        float camberRAD[4];
+        float suspensionTravel[4];
+        float drs = 0;
+        float tc = 0;
+        float heading = 0;
+        float pitch = 0;
+        float roll = 0;
+        float cgHeight;
+        float carDamage[5];
+        int numberOfTyresOut = 0;
+        int pitLimiterOn = 0;
+        float abs = 0;
+        float kersCharge = 0;
+        float kersInput = 0;
+        int autoShifterOn = 0;
+        float rideHeight[2];
+        float turboBoost = 0;
+        float ballast = 0;
+        float airDensity = 0;
+    };
+
+    struct SPageGraphic {
+        int packetId = 0;
+        AC_STATUS status = AC_OFF;
+        AC_SESSION_TYPE session = AC_PRACTICE;
+        wchar_t currentTime[15];
+        wchar_t lastTime[15];
+        wchar_t bestTime[15];
+        wchar_t split[15];
+        int completedLaps = 0;
+        int position = 0;
+        int iCurrentTime = 0;
+        int iLastTime = 0;
+        int iBestTime = 0;
+        float sessionTimeLeft = 0;
+        float distanceTraveled = 0;
+        int isInPit = 0;
+        int currentSectorIndex = 0;
+        int lastSectorTime = 0;
+        int numberOfLaps = 0;
+        wchar_t tyreCompound[33];
+
+        float replayTimeMultiplier = 0;
+        float normalizedCarPosition = 0;
+        float carCoordinates[3];
+        float penaltyTime = 0;
+        AC_FLAG_TYPE flag = AC_NO_FLAG;
+        int idealLineOn = 0;
+        int isInPitLane = 0;
+
+        float surfaceGrip = 0;
+    };
+
+    #pragma pack(pop)
+
+    struct TelemetrySnapshot {
+        double timestamp;
+        SPagePhysics physics;
+        SPageGraphic graphic;
+    };
+
+    class ACTelemetry : public Node {
+        GDCLASS(ACTelemetry, Node)
+
+    private:
+        // shared memory handles
+        HANDLE hMapPhysics;
+        HANDLE hMapGraphic;
+
+        // shared memory pointers
+        SPagePhysics* dataPhysics;
+        SPageGraphic* dataGraphic;
+
+        // logging logic
+        double sample_interval = 0.02;
+        double session_time = 0.0;
+        double accum = 0.0;
+        
+        std::vector<std::vector<TelemetrySnapshot>> sessions_data;
+        int last_lap_count = 0;
+        bool is_connected = false;
+        bool is_logging = false;
+
+    protected:
+        static void _bind_methods();
+
+    public:
+        ACTelemetry();
+        ~ACTelemetry();
+
+        void _process(double delta) override;
+        
+        bool is_connected_to_ac() const; // getter
+        void set_connected_to_ac(bool p_connected); // setter (needed for property)
+
+        bool is_currently_logging() const; // getter
+        void set_currently_logging(bool p_logging); // setter
+
+        double get_sample_interval() const; // getter
+        void set_sample_interval(double p_sample_interval); // setter
+
+        String connect_to_ac();
+        void disconnect_from_ac();
+        
+        void start_logging();
+        String finish_logging();
+
+        float get_speed(); // simple test function
+    };
+
+}
