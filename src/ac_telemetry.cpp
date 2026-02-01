@@ -132,9 +132,9 @@ void ACTelemetry::_process(double delta) {
 
     // check for refresh time
     accum += delta;
-    if (accum >= 0.02) {
-        session_time += 0.02;
-        accum -= 0.02;
+    if (accum >= sample_interval) {
+        session_time += sample_interval;
+        accum -= sample_interval;
     } else {
         return;
     }
