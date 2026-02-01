@@ -27,6 +27,8 @@ ACTelemetry::~ACTelemetry() {
 
 void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("connect_to_ac"), &ACTelemetry::connect_to_ac);
+    ClassDB::bind_method(D_METHOD("disconnect_from_ac"), &ACTelemetry::disconnect_from_ac);
+
     ClassDB::bind_method(D_METHOD("start_logging"), &ACTelemetry::start_logging);
     ClassDB::bind_method(D_METHOD("finish_logging"), &ACTelemetry::finish_logging);
 
