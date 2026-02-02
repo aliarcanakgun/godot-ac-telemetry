@@ -143,6 +143,9 @@ void ACTelemetry::_process(double delta) {
     
     // telemetry stuff
     if (is_logging) {
+        // check if game is not live
+        if (dataGraphic->status != AC_LIVE) { return; }
+
         // check for new lap in graphic page
         if (dataGraphic->completedLaps > last_lap_count || sessions_data.empty()) {
             sessions_data.push_back(std::vector<TelemetrySnapshot>());
