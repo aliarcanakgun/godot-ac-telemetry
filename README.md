@@ -6,7 +6,18 @@
 
 ### How to compile:
 * First, you need SCons installed on your PC (you can install it using `python -m pip install --user scons`)
-* Open your terminal in the root folder and use the commands below:
+* Then, clone the repository using:
+```bash
+git clone --recurse-submodules https://github.com/aliarcanakgun/godot-ac-telemetry.git
+cd godot-ac-telemetry
+```
+Before building the extension, you must compile the godot-cpp library. Navigate to the submodule folder and run SCons:
+```bash
+cd godot-cpp
+scons platform=windows target=template_debug # or template_release
+cd ..
+```
+* Finally, in the root folder, use the commands below to build the extension:
 ```bash
 # debug build
 scons platform=windows target=template_debug
