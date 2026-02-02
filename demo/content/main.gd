@@ -25,4 +25,4 @@ func _process(_delta):
 		print("Speed: %.2f" % $ACTelemetry.get_speed())
 		
 		if Input.is_action_just_pressed("ui_cancel"):
-			$ACTelemetry.finish_logging()
+			print($ACTelemetry.finish_logging())
