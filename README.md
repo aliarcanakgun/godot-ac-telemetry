@@ -1,4 +1,4 @@
-# Godot AC Telemetry Extension
+# Godot AC Telemetry Extension (WIP)
 
 ### Requirements:
 * Godot Engine 4.5+
@@ -17,7 +17,7 @@ scons platform=windows target=template_release
 
 ### Known issues:
 * Session saving is not working well (`finish_logging()`).
-* This extension is not production-ready yet, but the core system is implemented.
+* **This extension is not production-ready yet,** but the core system is implemented.
 
 ### Public functions & properties:
 
