@@ -1,4 +1,4 @@
-# Godot AC Telemetry Extension
+# Godot AC Telemetry Extension (WIP)
 
 ### Requirements:
 * Godot Engine 4.5+
