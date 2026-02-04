@@ -36,16 +36,15 @@ void ACTelemetry::_bind_methods() {
     
     ClassDB::add_signal("ACTelemetry", MethodInfo("connection_lost"));
 
-    // Bind Getter/Setter methods first
+    // bind getter/setter methods first
     ClassDB::bind_method(D_METHOD("is_connected_to_ac"), &ACTelemetry::is_connected_to_ac);   
     ClassDB::bind_method(D_METHOD("is_currently_logging"), &ACTelemetry::is_currently_logging);
     ClassDB::bind_method(D_METHOD("get_sample_interval"), &ACTelemetry::get_sample_interval);
     ClassDB::bind_method(D_METHOD("set_sample_interval"), &ACTelemetry::set_sample_interval);
 
-    // Register Properties to Godot Inspector
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval", godot::PROPERTY_HINT_NONE, "The interval to update telemetry. In seconds."), "set_sample_interval", "get_sample_interval");
-    // ADD_PROPERTY(PropertyInfo(Variant::BOOL, "is_connected", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_NONE), "", "is_connected_to_ac");
-    // ADD_PROPERTY(PropertyInfo(Variant::BOOL, "is_logging", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_NONE), "", "is_currently_logging");
+    // register properties to godot inspector
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval", godot::PROPERTY_HINT_NONE, "The interval to update telemetry. In seconds. Can't be changed while logging."), "set_sample_interval", "get_sample_interval");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "save_file_signature", godot::PROPERTY_HINT_NONE, "The signature string written at the beginning of the binary save file to identify it. Can't be changed while logging."), "get_save_file_signature", "set_save_file_signature");
 }
 
 bool ACTelemetry::is_connected_to_ac() const { return is_connected; }
@@ -53,7 +52,16 @@ bool ACTelemetry::is_connected_to_ac() const { return is_connected; }
 bool ACTelemetry::is_currently_logging() const { return is_logging; }
 
 double ACTelemetry::get_sample_interval() const { return sample_interval; }
-void ACTelemetry::set_sample_interval(double p_sample_interval) { sample_interval = p_sample_interval; }
+void ACTelemetry::set_sample_interval(double p_sample_interval) {
+    if (p_sample_interval <= 0.0) return;
+    if (!is_logging) sample_interval = p_sample_interval; // disable while logging
+}
+
+String ACTelemetry::get_save_file_signature() const { return save_file_signature; }
+void ACTelemetry::set_save_file_signature(String p_signature) {
+    if (p_signature.is_empty()) return;
+    if (!is_logging) save_file_signature = p_signature; // disable while logging
+}
 
 String ACTelemetry::connect_to_ac() {
     is_connected = false;
@@ -64,6 +72,7 @@ String ACTelemetry::connect_to_ac() {
     if (hMapPhysics) { CloseHandle(hMapPhysics); hMapPhysics = nullptr; }
     if (hMapGraphic) { CloseHandle(hMapGraphic); hMapGraphic = nullptr; }
 
+
     // try to open physics map
     hMapPhysics = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_physics");
     if (hMapPhysics == NULL) {
@@ -73,21 +82,21 @@ String ACTelemetry::connect_to_ac() {
 
     dataPhysics = (SPagePhysics*)MapViewOfFile(hMapPhysics, FILE_MAP_READ, 0, 0, sizeof(SPagePhysics));
     if (dataPhysics == nullptr) {
-        CloseHandle(hMapPhysics); hMapPhysics = nullptr; // Belleğe eşleyemezsek handle'ı kapatmalıyız
+        CloseHandle(hMapPhysics); hMapPhysics = nullptr;
         
         DWORD err = GetLastError();
         return vformat("Physics MapViewOfFile failed (%d): %s", int64_t(err), win_error_string(err));
     }
 
+
     // try to open graphic map
     hMapGraphic = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_graphics");
     if (hMapGraphic == NULL) {
-        DWORD err = GetLastError();
-        
-        // clear the physics
+        // clear physics
         UnmapViewOfFile(dataPhysics); dataPhysics = nullptr;
         CloseHandle(hMapPhysics); hMapPhysics = nullptr;
-
+        
+        DWORD err = GetLastError();
         return vformat("Graphic Map Error (%d): %s", int64_t(err), win_error_string(err));
     }
     
@@ -103,9 +112,40 @@ String ACTelemetry::connect_to_ac() {
         return vformat("Graphic MapViewOfFile failed (%d): %s", int64_t(err), win_error_string(err));
     }
 
+
+    // try to open static map
+    hMapStatic = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_static");
+    if (hMapStatic == NULL) {
+        // clear physics
+        UnmapViewOfFile(dataPhysics); dataPhysics = nullptr;
+        CloseHandle(hMapPhysics); hMapPhysics = nullptr;
+        
+        // clear graphic
+        UnmapViewOfFile(dataGraphic); dataGraphic = nullptr;
+        CloseHandle(hMapGraphic); hMapGraphic = nullptr;
+        
+        DWORD err = GetLastError();
+        return vformat("Static Map Error (%d): %s", int64_t(err), win_error_string(err));
+    }
+    
+    dataStatic = (SPageStatic*)MapViewOfFile(hMapStatic, FILE_MAP_READ, 0, 0, sizeof(SPageStatic));
+    if (dataStatic == nullptr) {
+        // clear everything
+        UnmapViewOfFile(dataPhysics); dataPhysics = nullptr;
+        CloseHandle(hMapPhysics); hMapPhysics = nullptr;
+
+        UnmapViewOfFile(dataGraphic); dataGraphic = nullptr;
+        CloseHandle(hMapGraphic); hMapGraphic = nullptr;
+
+        CloseHandle(hMapStatic); hMapStatic = nullptr;
+
+        DWORD err = GetLastError();
+        return vformat("Static MapViewOfFile failed (%d): %s", int64_t(err), win_error_string(err));
+    }
+
     // finalize connection status
     is_connected = true;
-    return "";
+    return String("");
 }
 
 void ACTelemetry::disconnect_from_ac() {
@@ -165,6 +205,9 @@ void ACTelemetry::_process(double delta) {
 }
 
 String ACTelemetry::finish_logging() {
+    if (!is_connected) return String("AC is not connected");
+    if (!is_logging) return String("Telemetry is not working");
+
     is_logging = false;
 
     std::ofstream outfile("last_session_data.bin", std::ios::binary);
@@ -172,6 +215,37 @@ String ACTelemetry::finish_logging() {
         return String("Failed open last session data");
     }
 
+    // write the signature
+    CharString utf8_signature = save_file_signature.utf8();
+    outfile.write(utf8_signature.get_data(), utf8_signature.length());
+    if (outfile.fail()) {
+        outfile.close();
+        return String("Write error while writing signature");
+    }
+
+    // write static map/data (or whatever you call it)
+    outfile.write(reinterpret_cast<const char*>(dataStatic), sizeof(SPageStatic));
+    if (outfile.fail()) {
+        outfile.close();
+        return String("Write error while writing static map");
+    }
+
+    // write sample interval value
+    outfile.write(reinterpret_cast<const char*>(&sample_interval), sizeof(double));
+    if (outfile.fail()) {
+        outfile.close();
+        return String("Write error while writing sample interval value");
+    }
+
+    // write total laps count
+    uint64_t total_laps = sessions_data.size();
+    outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
+    if (outfile.fail()) {
+        outfile.close();
+        return String("Write error while writing total laps count");
+    }
+
+    // write sessions
     for (const auto& lap : sessions_data) {
         uint64_t lap_size = static_cast<uint64_t>(lap.size());
         outfile.write(reinterpret_cast<const char*>(&lap_size), sizeof(lap_size));
@@ -180,7 +254,7 @@ String ACTelemetry::finish_logging() {
             outfile.write(reinterpret_cast<const char*>(lap.data()), lap_size * sizeof(TelemetrySnapshot));
             if (outfile.fail()) {
                 outfile.close();
-                return String("Write error last session data");
+                return String("Write error while writing telemetry data");
             }
         }
     }

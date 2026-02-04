@@ -107,6 +107,41 @@ namespace godot {
         float surfaceGrip = 0;
     };
 
+    struct SPageStatic {
+        wchar_t smVersion[15];
+        wchar_t acVersion[15];
+        // session static info
+        int numberOfSessions = 0;
+        int numCars = 0;
+        wchar_t carModel[33];
+        wchar_t track[33];
+        wchar_t playerName[33];
+        wchar_t playerSurname[33];
+        wchar_t playerNick[33];
+        int sectorCount = 0;
+
+        // car static info
+        float maxTorque = 0;
+        float maxPower = 0;
+        int maxRpm = 0;
+        float maxFuel = 0;
+        float suspensionMaxTravel[4];
+        float tyreRadius[4];
+        float maxTurboBoost = 0;
+
+        float airTemp = 0;
+        float roadTemp = 0;
+        bool penaltiesEnabled = false;
+
+        float aidFuelRate = 0;
+        float aidTireRate = 0;
+        float aidMechanicalDamage = 0;
+        bool aidAllowTyreBlankets = false;
+        float aidStability = 0;
+        bool aidAutoClutch = false;
+        bool aidAutoBlip = false;
+    };
+
     #pragma pack(pop)
 
     struct TelemetrySnapshot {
@@ -122,17 +157,22 @@ namespace godot {
         // shared memory handles
         HANDLE hMapPhysics;
         HANDLE hMapGraphic;
+        HANDLE hMapStatic;
 
         // shared memory pointers
         SPagePhysics* dataPhysics;
         SPageGraphic* dataGraphic;
+        SPageStatic* dataStatic;
 
         // logging logic
-        double sample_interval = 0.02;
+        double sample_interval = 0.02; // 50 hz
         double session_time = 0.0;
         double accum = 0.0;
         
         std::vector<std::vector<TelemetrySnapshot>> sessions_data;
+
+        String save_file_signature = "ACTL"; 
+
         int last_lap_count = 0;
         bool is_connected = false;
         bool is_logging = false;
@@ -147,10 +187,10 @@ namespace godot {
         void _process(double delta) override;
         
         bool is_connected_to_ac() const; // getter
-        void set_connected_to_ac(bool p_connected); // setter (needed for property)
-
         bool is_currently_logging() const; // getter
-        void set_currently_logging(bool p_logging); // setter
+
+        String get_save_file_signature() const; // getter
+        void set_save_file_signature(String p_signature); // setter
 
         double get_sample_interval() const; // getter
         void set_sample_interval(double p_sample_interval); // setter
