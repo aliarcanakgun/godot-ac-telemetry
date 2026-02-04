@@ -170,6 +170,8 @@ namespace godot {
         double accum = 0.0;
         
         std::vector<std::vector<TelemetrySnapshot>> sessions_data;
+        std::vector<std::vector<TelemetrySnapshot>> loaded_data;
+        SPageStatic loaded_static;
 
         String save_file_signature = "ACTL"; 
 
@@ -200,6 +202,8 @@ namespace godot {
         
         void start_logging();
         String finish_logging();
+
+        String load_session_data(String bin_file_path);
 
         float get_speed(); // simple test function
     };

@@ -1,6 +1,7 @@
 #include "ac_telemetry.h"
 #include "helper.h"
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 #include <fstream>
 #include <cstdint>
 
@@ -19,9 +20,13 @@ ACTelemetry::ACTelemetry() {
 }
 
 ACTelemetry::~ACTelemetry() {
-    // release the lap data from RAM immediately
+    // release the datas from ram immediately
     sessions_data.clear();
     sessions_data.shrink_to_fit();
+
+    loaded_data.clear();
+    loaded_data.shrink_to_fit();
+
     disconnect_from_ac();
 }
 
@@ -32,6 +37,8 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("start_logging"), &ACTelemetry::start_logging);
     ClassDB::bind_method(D_METHOD("finish_logging"), &ACTelemetry::finish_logging);
 
+    ClassDB::bind_method(D_METHOD("load_session_data", "bin_file_path"), &ACTelemetry::load_session_data);
+
     ClassDB::bind_method(D_METHOD("get_speed"), &ACTelemetry::get_speed);
     
     ClassDB::add_signal("ACTelemetry", MethodInfo("connection_lost"));
@@ -39,12 +46,19 @@ void ACTelemetry::_bind_methods() {
     // bind getter/setter methods first
     ClassDB::bind_method(D_METHOD("is_connected_to_ac"), &ACTelemetry::is_connected_to_ac);   
     ClassDB::bind_method(D_METHOD("is_currently_logging"), &ACTelemetry::is_currently_logging);
+
     ClassDB::bind_method(D_METHOD("get_sample_interval"), &ACTelemetry::get_sample_interval);
     ClassDB::bind_method(D_METHOD("set_sample_interval"), &ACTelemetry::set_sample_interval);
 
+    ClassDB::bind_method(D_METHOD("get_save_file_signature"), &ACTelemetry::get_save_file_signature);
+    ClassDB::bind_method(D_METHOD("set_save_file_signature"), &ACTelemetry::set_save_file_signature);
+
     // register properties to godot inspector
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval", godot::PROPERTY_HINT_NONE, "The interval to update telemetry. In seconds. Can't be changed while logging."), "set_sample_interval", "get_sample_interval");
-    ADD_PROPERTY(PropertyInfo(Variant::STRING, "save_file_signature", godot::PROPERTY_HINT_NONE, "The signature string written at the beginning of the binary save file to identify it. Can't be changed while logging."), "get_save_file_signature", "set_save_file_signature");
+    // TODO: ADD DOCUMENTATION: "The interval to update telemetry. In seconds. Can't be changed while logging."
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval"), "set_sample_interval", "get_sample_interval");
+    // TODO: ADD DOCUMENTATION: "The signature string written at the beginning of the binary save file to identify it. Can't be changed while logging."
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "save_file_signature"), "set_save_file_signature", "get_save_file_signature");
+    
 }
 
 bool ACTelemetry::is_connected_to_ac() const { return is_connected; }
@@ -209,10 +223,10 @@ String ACTelemetry::finish_logging() {
     if (!is_logging) return String("Telemetry is not working");
 
     is_logging = false;
-
-    std::ofstream outfile("last_session_data.bin", std::ios::binary);
+    const char *filename = "last_session_data.bin";
+    std::ofstream outfile(filename, std::ios::binary);
     if (!outfile.is_open()) {
-        return String("Failed open last session data");
+        return String("Could not open file for writing: " + String(filename));
     }
 
     // write the signature
@@ -220,21 +234,25 @@ String ACTelemetry::finish_logging() {
     outfile.write(utf8_signature.get_data(), utf8_signature.length());
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing signature");
+        return String("Write error while writing signature to '" + String(filename) + "'");
     }
 
     // write static map/data (or whatever you call it)
+    if (!dataStatic) {
+        outfile.close();
+        return String("Static data pointer is null; cannot write SPageStatic to '" + String(filename) + "'");
+    }
     outfile.write(reinterpret_cast<const char*>(dataStatic), sizeof(SPageStatic));
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing static map");
+        return String("Write error while writing static SPageStatic to '" + String(filename) + "'");
     }
 
     // write sample interval value
     outfile.write(reinterpret_cast<const char*>(&sample_interval), sizeof(double));
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing sample interval value");
+        return String("Write error while writing sample_interval (double) to '" + String(filename) + "'");
     }
 
     // write total laps count
@@ -242,19 +260,25 @@ String ACTelemetry::finish_logging() {
     outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing total laps count");
+        return String("Write error while writing total_laps (" + String::num_uint64(total_laps) + ") to '" + String(filename) + "'");
     }
 
-    // write sessions
-    for (const auto& lap : sessions_data) {
+    // write sessions (include lap index in messages)
+    for (size_t idx = 0; idx < sessions_data.size(); ++idx) {
+        const auto &lap = sessions_data[idx];
         uint64_t lap_size = static_cast<uint64_t>(lap.size());
         outfile.write(reinterpret_cast<const char*>(&lap_size), sizeof(lap_size));
+
+        if (outfile.fail()) {
+            outfile.close();
+            return String("Write error while writing lap_size for lap " + String::num_uint64(idx) + " to '" + String(filename) + "'");
+        }
 
         if (lap_size > 0) {
             outfile.write(reinterpret_cast<const char*>(lap.data()), lap_size * sizeof(TelemetrySnapshot));
             if (outfile.fail()) {
                 outfile.close();
-                return String("Write error while writing telemetry data");
+                return String("Write error while writing telemetry data for lap " + String::num_uint64(idx) + " (snapshots: " + String::num_uint64(lap_size) + ") to '" + String(filename) + "'");
             }
         }
     }
@@ -262,8 +286,93 @@ String ACTelemetry::finish_logging() {
     outfile.close();
     sessions_data.clear(); // free ram after saving
 
-    return String("last_session_data.bin");
+    return String(filename);
 }
+
+String ACTelemetry::load_session_data(String bin_file_path) {
+    // clear previous data
+    loaded_data.clear();
+
+    // convert godot path (res:// or user://) to filesystem path if needed
+    String os_path = bin_file_path;
+    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
+        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+    }
+
+    // keep CharString in local var so get_data() pointer stays valid
+    CharString cs = os_path.utf8();
+    std::string path(cs.get_data(), cs.length());
+
+    // open the file in binary mode
+    std::ifstream infile(path, std::ios::binary);
+    if (!infile.is_open()) {
+        return String("Could not open file for reading: ") + os_path;
+    }
+
+    // read and check signature
+    // we use a buffer with size + 1 for safety
+    int sig_len = save_file_signature.utf8().length();
+    std::vector<char> sig_buffer(sig_len);
+    infile.read(sig_buffer.data(), sig_len);
+    
+    String read_sig = String::utf8(sig_buffer.data(), sig_len);
+    if (read_sig != save_file_signature) {
+        infile.close();
+        return String("Invalid file signature. Expected: " + save_file_signature + " but got: " + read_sig);
+    }
+
+    // read static data
+    infile.read(reinterpret_cast<char*>(&loaded_static), sizeof(SPageStatic));
+    if (infile.fail()) {
+        infile.close();
+        return String("Failed to read static data");
+    }
+
+    // read sample interval
+    infile.read(reinterpret_cast<char*>(&sample_interval), sizeof(double));
+    if (infile.fail()) {
+        infile.close();
+        return String("Failed to read sample interval");
+    }
+
+    // read total laps count
+    uint64_t total_laps = 0;
+    infile.read(reinterpret_cast<char*>(&total_laps), sizeof(total_laps));
+    if (infile.fail()) {
+        infile.close();
+        return String("Failed to read total laps count");
+    }
+
+    // read each lap data
+    for (uint64_t i = 0; i < total_laps; ++i) {
+        uint64_t lap_size = 0;
+        infile.read(reinterpret_cast<char*>(&lap_size), sizeof(lap_size));
+        
+        if (infile.fail()) {
+            infile.close();
+            return String("Unexpected end of file while reading lap size");
+        }
+
+        if (lap_size > 0) {
+            std::vector<TelemetrySnapshot> lap_data;
+            lap_data.resize(lap_size);
+
+            // read entire lap block into vector memory
+            infile.read(reinterpret_cast<char*>(lap_data.data()), lap_size * sizeof(TelemetrySnapshot));
+            
+            if (infile.fail()) {
+                infile.close();
+                return String("Failed to read snapshot data for lap " + String::num_uint64(i));
+            }
+
+            loaded_data.push_back(lap_data);
+        }
+    }
+
+    infile.close();
+    return String("");
+}
+
 
 float ACTelemetry::get_speed() {
     if (dataPhysics) {
