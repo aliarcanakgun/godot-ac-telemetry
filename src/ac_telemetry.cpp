@@ -13,8 +13,12 @@ ACTelemetry::ACTelemetry() {
     // initialize all pointers
     hMapPhysics = NULL;
     hMapGraphic = NULL;
+    hMapStatic = NULL;
+
     dataPhysics = nullptr;
     dataGraphic = nullptr;
+    dataStatic = nullptr;
+
     is_connected = false;
     is_logging = false;
 }
@@ -24,8 +28,8 @@ ACTelemetry::~ACTelemetry() {
     sessions_data.clear();
     sessions_data.shrink_to_fit();
 
-    loaded_data.clear();
-    loaded_data.shrink_to_fit();
+    loaded_session_data.clear();
+    loaded_session_data.shrink_to_fit();
 
     disconnect_from_ac();
 }
@@ -38,9 +42,10 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("finish_logging", "output_file_path"), &ACTelemetry::finish_logging);
 
     ClassDB::bind_method(D_METHOD("load_session_data", "file_path"), &ACTelemetry::load_session_data);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_lap_count"), &ACTelemetry::get_loaded_session_lap_count);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_sample_interval"), &ACTelemetry::get_loaded_session_sample_interval);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_lap_data", "lap_index"), &ACTelemetry::get_loaded_session_lap_data);
 
-    ClassDB::bind_method(D_METHOD("get_speed"), &ACTelemetry::get_speed);
-    
     ClassDB::add_signal("ACTelemetry", MethodInfo("connection_lost"));
 
     // bind getter/setter methods first
@@ -166,8 +171,10 @@ void ACTelemetry::disconnect_from_ac() {
     is_connected = false;
     if (dataPhysics) { UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; }
     if (dataGraphic) { UnmapViewOfFile(dataGraphic); dataGraphic = nullptr; }
+    if (dataStatic) { UnmapViewOfFile(dataStatic); dataStatic = nullptr; }
     if (hMapPhysics) { CloseHandle(hMapPhysics); hMapPhysics = nullptr; }
     if (hMapGraphic) { CloseHandle(hMapGraphic); hMapGraphic = nullptr; }
+    if (hMapStatic) { CloseHandle(hMapStatic); hMapStatic = nullptr; }
 }
 
 void ACTelemetry::start_logging() {
@@ -304,7 +311,7 @@ String ACTelemetry::load_session_data(String file_path) {
     if (file_path.is_empty()) return String("File path is empty.");
 
     // clear previous data
-    loaded_data.clear();
+    loaded_session_data.clear();
 
     // convert godot path (res:// or user://) to filesystem path if needed
     String os_path = file_path;
@@ -335,29 +342,29 @@ String ACTelemetry::load_session_data(String file_path) {
     }
 
     // read static data
-    infile.read(reinterpret_cast<char*>(&loaded_static), sizeof(SPageStatic));
+    infile.read(reinterpret_cast<char*>(&loaded_session_static_data), sizeof(SPageStatic));
     if (infile.fail()) {
         infile.close();
         return String("Failed to read static data");
     }
 
     // read sample interval
-    infile.read(reinterpret_cast<char*>(&sample_interval), sizeof(double));
+    infile.read(reinterpret_cast<char*>(&loaded_session_sample_interval), sizeof(double));
     if (infile.fail()) {
         infile.close();
         return String("Failed to read sample interval");
     }
 
     // read total laps count
-    uint64_t total_laps = 0;
-    infile.read(reinterpret_cast<char*>(&total_laps), sizeof(total_laps));
+    loaded_session_lap_count = 0;
+    infile.read(reinterpret_cast<char*>(&loaded_session_lap_count), sizeof(loaded_session_lap_count));
     if (infile.fail()) {
         infile.close();
         return String("Failed to read total laps count");
     }
 
     // read each lap data
-    for (uint64_t i = 0; i < total_laps; ++i) {
+    for (uint64_t i = 0; i < loaded_session_lap_count; ++i) {
         uint64_t lap_size = 0;
         infile.read(reinterpret_cast<char*>(&lap_size), sizeof(lap_size));
         
@@ -378,7 +385,7 @@ String ACTelemetry::load_session_data(String file_path) {
                 return String("Failed to read snapshot data for lap " + String::num_uint64(i));
             }
 
-            loaded_data.push_back(lap_data);
+            loaded_session_data.push_back(lap_data);
         }
     }
 
@@ -386,10 +393,171 @@ String ACTelemetry::load_session_data(String file_path) {
     return String("");
 }
 
+Array ACTelemetry::get_loaded_session_lap_data(int lap_index) {
+    if (lap_index < 0 || lap_index >= loaded_session_data.size()) return Array();
 
-float ACTelemetry::get_speed() {
-    if (dataPhysics) {
-        return dataPhysics->speedKmh;
+    const auto &lap = loaded_session_data[lap_index];
+    const int64_t count = (int64_t)lap.size();
+
+    Array output;
+    output.resize(count);
+
+    for (int64_t i = 0; i < count; ++i) {
+        output[i] = _snapshot_to_dict(lap[i]);
     }
-    return 0.0f;
+
+    return output;
+}
+
+Dictionary ACTelemetry::get_loaded_session_static_data() {
+    return _static_to_dict(loaded_session_static_data);
+}
+
+int ACTelemetry::get_loaded_session_lap_count() {
+    return loaded_session_lap_count;
+}
+
+double ACTelemetry::get_loaded_session_sample_interval() {
+    return loaded_session_sample_interval;
+}
+
+void ACTelemetry::close_loaded_session() {
+    loaded_session_data.clear();
+    loaded_session_data.shrink_to_fit();
+
+    loaded_session_sample_interval = 0.0;
+    loaded_session_lap_count = -1;
+    
+    loaded_session_static_data = {};
+}
+
+
+static Dictionary _snapshot_to_dict(const TelemetrySnapshot &s) {
+    Dictionary d;
+    d["timestamp"] = s.timestamp;
+    d["physics"] = _physics_to_dict(s.physics);
+    d["graphic"] = _graphic_to_dict(s.graphic);
+    return d;
+}
+
+static Dictionary _physics_to_dict(const SPagePhysics &p) {
+    Dictionary d;
+
+    d["packetId"] = p.packetId;
+    d["gas"] = p.gas;
+    d["brake"] = p.brake;
+    d["fuel"] = p.fuel;
+    d["gear"] = p.gear;
+    d["rpms"] = p.rpms;
+    d["steerAngle"] = p.steerAngle;
+    d["speedKmh"] = p.speedKmh;
+    d["velocity"] = Vector3(p.velocity[0], p.velocity[1], p.velocity[2]);
+    d["accG"] = Vector3(p.accG[0], p.accG[1], p.accG[2]);
+    d["wheelSlip"] = Vector4(p.wheelSlip[0], p.wheelSlip[1], p.wheelSlip[2], p.wheelSlip[3]);
+    d["wheelLoad"] = Vector4(p.wheelLoad[0], p.wheelLoad[1], p.wheelLoad[2], p.wheelLoad[3]);
+    d["wheelsPressure"] = Vector4(p.wheelsPressure[0], p.wheelsPressure[1], p.wheelsPressure[2], p.wheelsPressure[3]);
+    d["wheelAngularSpeed"] = Vector4(p.wheelAngularSpeed[0], p.wheelAngularSpeed[1], p.wheelAngularSpeed[2], p.wheelAngularSpeed[3]);
+    d["tyreWear"] = Vector4(p.tyreWear[0], p.tyreWear[1], p.tyreWear[2], p.tyreWear[3]);
+    d["tyreDirtyLevel"] = Vector4(p.tyreDirtyLevel[0], p.tyreDirtyLevel[1], p.tyreDirtyLevel[2], p.tyreDirtyLevel[3]);
+    d["tyreCoreTemperature"] = Vector4(p.tyreCoreTemperature[0], p.tyreCoreTemperature[1], p.tyreCoreTemperature[2], p.tyreCoreTemperature[3]);
+    d["camberRAD"] = Vector4(p.camberRAD[0], p.camberRAD[1], p.camberRAD[2], p.camberRAD[3]);
+    d["suspensionTravel"] = Vector4(p.suspensionTravel[0], p.suspensionTravel[1], p.suspensionTravel[2], p.suspensionTravel[3]);
+    d["drs"] = p.drs;
+    d["tc"] = p.tc;
+    d["heading"] = p.heading;
+    d["pitch"] = p.pitch;
+    d["roll"] = p.roll;
+    d["cgHeight"] = p.cgHeight;
+    d["carDamage"] = Vector4(p.carDamage[0], p.carDamage[1], p.carDamage[2], p.carDamage[3]); // actually it's a float[5] but first 4 is valid (according to net)
+    d["numberOfTyresOut"] = p.numberOfTyresOut;
+    d["pitLimiterOn"] = p.pitLimiterOn;
+    d["abs"] = p.abs;
+    d["kersCharge"] = p.kersCharge;
+    d["kersInput"] = p.kersInput;
+    d["autoShifterOn"] = p.autoShifterOn;
+    d["rideHeight"] = Vector2(p.rideHeight[0], p.rideHeight[1]);
+    d["turboBoost"] = p.turboBoost;
+    d["ballast"] = p.ballast;
+    d["airDensity"] = p.airDensity;
+
+    return d;
+}
+
+static Dictionary _graphic_to_dict(const SPageGraphic &g) {
+    Dictionary d;
+
+    d["packetId"] = g.packetId;
+    
+    // d["status"] = (int)g.status;
+    // d["session"] = (int)g.session;
+
+    d["currentTime"] = wchar_to_gdstring(g.currentTime, 15);
+    d["lastTime"] = wchar_to_gdstring(g.lastTime, 15);
+    d["bestTime"] = wchar_to_gdstring(g.bestTime, 15);
+    d["split"] = wchar_to_gdstring(g.split, 15);
+    d["completedLaps"] = g.completedLaps;
+    d["position"] = g.position;
+    d["iCurrentTime"] = g.iCurrentTime;
+    d["iLastTime"] = g.iLastTime;
+    d["iBestTime"] = g.iBestTime;
+    d["sessionTimeLeft"] = g.sessionTimeLeft;
+    d["distanceTraveled"] = g.distanceTraveled;
+    d["isInPit"] = g.isInPit;
+    d["currentSectorIndex"] = g.currentSectorIndex;
+    d["lastSectorTime"] = g.lastSectorTime;
+    d["numberOfLaps"] = g.numberOfLaps;
+    d["tyreCompound"] = wchar_to_gdstring(g.tyreCompound, 33);
+
+    // d["replayTimeMultiplier"] = g.replayTimeMultiplier;
+
+    d["normalizedCarPosition"] = g.normalizedCarPosition;
+    d["carCoordinates"] = Vector3(g.carCoordinates[0], g.carCoordinates[1], g.carCoordinates[2]);
+    d["penaltyTime"] = g.penaltyTime;
+    d["flag"] = (int)g.flag;
+    
+    //d["idealLineOn"] = g.idealLineOn;
+
+    d["isInPitLane"] = g.isInPitLane;
+    d["surfaceGrip"] = g.surfaceGrip;
+
+    return d;
+}
+
+static Dictionary _static_to_dict(const SPageStatic &s) {
+    Dictionary d;
+
+    d["smVersion"] = wchar_to_gdstring(s.smVersion, 15);
+    d["acVersion"] = wchar_to_gdstring(s.acVersion, 15);
+
+    d["numberOfSessions"] = s.numberOfSessions;
+    d["numCars"] = s.numCars;
+    d["carModel"] = wchar_to_gdstring(s.carModel, 15);
+    d["track"] = wchar_to_gdstring(s.track, 15);
+    d["playerName"] = wchar_to_gdstring(s.playerName, 15);
+    d["playerSurname"] = wchar_to_gdstring(s.playerSurname, 15);
+    d["playerNick"] = wchar_to_gdstring(s.playerNick, 15);
+    d["playerNick"] = wchar_to_gdstring(s.playerNick, 15);
+    d["sectorCount"] = s.sectorCount;
+    
+    d["maxTorque"] = s.maxTorque;
+    d["maxPower"] = s.maxPower;
+    d["maxRpm"] = s.maxRpm;
+    d["maxFuel"] = s.maxFuel;
+    d["suspensionMaxTravel"] = Vector4(s.suspensionMaxTravel[0], s.suspensionMaxTravel[1], s.suspensionMaxTravel[2], s.suspensionMaxTravel[3]);
+    d["tyreRadius"] = Vector4(s.tyreRadius[0], s.tyreRadius[1], s.tyreRadius[2], s.tyreRadius[3]);
+    d["maxTurboBoost"] = s.maxTurboBoost;
+
+    d["airTemp"] = s.airTemp;
+    d["roadTemp"] = s.roadTemp;
+    d["penaltiesEnabled"] = s.penaltiesEnabled;
+
+    d["aidFuelRate"] = s.aidFuelRate;
+    d["aidTireRate"] = s.aidTireRate;
+    d["aidMechanicalDamage"] = s.aidMechanicalDamage;
+    d["aidAllowTyreBlankets"] = s.aidAllowTyreBlankets;
+    d["aidStability"] = s.aidStability;
+    d["aidAutoClutch"] = s.aidAutoClutch;
+    d["aidAutoBlip"] = s.aidAutoBlip;
+
+    return d;
 }

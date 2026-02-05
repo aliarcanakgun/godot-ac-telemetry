@@ -110,6 +110,7 @@ namespace godot {
     struct SPageStatic {
         wchar_t smVersion[15];
         wchar_t acVersion[15];
+
         // session static info
         int numberOfSessions = 0;
         int numCars = 0;
@@ -170,8 +171,10 @@ namespace godot {
         double accum = 0.0;
         
         std::vector<std::vector<TelemetrySnapshot>> sessions_data;
-        std::vector<std::vector<TelemetrySnapshot>> loaded_data;
-        SPageStatic loaded_static;
+        std::vector<std::vector<TelemetrySnapshot>> loaded_session_data;
+        SPageStatic loaded_session_static_data;
+        double loaded_session_sample_interval = 0.0;
+        int loaded_session_lap_count = -1;
 
         String save_file_signature = "ACTL"; 
 
@@ -204,8 +207,11 @@ namespace godot {
         String finish_logging(String output_file_path);
 
         String load_session_data(String file_path);
-
-        float get_speed(); // simple test function
+        Array get_loaded_session_lap_data(int lap_index);
+        Dictionary get_loaded_session_static_data();
+        int get_loaded_session_lap_count();
+        double get_loaded_session_sample_interval();
+        void close_loaded_session();
     };
 
 }
