@@ -35,9 +35,9 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("disconnect_from_ac"), &ACTelemetry::disconnect_from_ac);
 
     ClassDB::bind_method(D_METHOD("start_logging"), &ACTelemetry::start_logging);
-    ClassDB::bind_method(D_METHOD("finish_logging"), &ACTelemetry::finish_logging);
+    ClassDB::bind_method(D_METHOD("finish_logging", "output_file_path"), &ACTelemetry::finish_logging);
 
-    ClassDB::bind_method(D_METHOD("load_session_data", "bin_file_path"), &ACTelemetry::load_session_data);
+    ClassDB::bind_method(D_METHOD("load_session_data", "file_path"), &ACTelemetry::load_session_data);
 
     ClassDB::bind_method(D_METHOD("get_speed"), &ACTelemetry::get_speed);
     
@@ -218,15 +218,26 @@ void ACTelemetry::_process(double delta) {
     }
 }
 
-String ACTelemetry::finish_logging() {
-    if (!is_connected) return String("AC is not connected");
-    if (!is_logging) return String("Telemetry is not working");
+String ACTelemetry::finish_logging(String output_file_path) {
+    if (!is_connected) return String("AC is not connected.");
+    if (!is_logging) return String("Telemetry is not working.");
+    if (output_file_path.is_empty()) return String("Output file path is empty.");
 
     is_logging = false;
-    const char *filename = "last_session_data.bin";
-    std::ofstream outfile(filename, std::ios::binary);
+
+    // convert godot path (res:// or user://) to filesystem path if needed
+    String os_path = output_file_path;
+    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
+        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+    }
+
+    // keep CharString in local var so get_data() pointer stays valid
+    CharString cs = os_path.utf8();
+    std::string path(cs.get_data(), cs.length());
+
+    std::ofstream outfile(path, std::ios::binary);
     if (!outfile.is_open()) {
-        return String("Could not open file for writing: " + String(filename));
+        return String("Could not open file for writing: " + os_path);
     }
 
     // write the signature
@@ -234,25 +245,25 @@ String ACTelemetry::finish_logging() {
     outfile.write(utf8_signature.get_data(), utf8_signature.length());
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing signature to '" + String(filename) + "'");
+        return String("Write error while writing signature to '" + os_path + "'");
     }
 
     // write static map/data (or whatever you call it)
     if (!dataStatic) {
         outfile.close();
-        return String("Static data pointer is null; cannot write SPageStatic to '" + String(filename) + "'");
+        return String("Static data pointer is null; cannot write SPageStatic to '" + os_path + "'");
     }
     outfile.write(reinterpret_cast<const char*>(dataStatic), sizeof(SPageStatic));
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing static SPageStatic to '" + String(filename) + "'");
+        return String("Write error while writing static SPageStatic to '" + os_path + "'");
     }
 
     // write sample interval value
     outfile.write(reinterpret_cast<const char*>(&sample_interval), sizeof(double));
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing sample_interval (double) to '" + String(filename) + "'");
+        return String("Write error while writing sample_interval (double) to '" + os_path + "'");
     }
 
     // write total laps count
@@ -260,7 +271,7 @@ String ACTelemetry::finish_logging() {
     outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing total_laps (" + String::num_uint64(total_laps) + ") to '" + String(filename) + "'");
+        return String("Write error while writing total_laps (" + String::num_uint64(total_laps) + ") to '" + os_path + "'");
     }
 
     // write sessions (include lap index in messages)
@@ -271,14 +282,14 @@ String ACTelemetry::finish_logging() {
 
         if (outfile.fail()) {
             outfile.close();
-            return String("Write error while writing lap_size for lap " + String::num_uint64(idx) + " to '" + String(filename) + "'");
+            return String("Write error while writing lap_size for lap " + String::num_uint64(idx) + " to '" + os_path + "'");
         }
 
         if (lap_size > 0) {
             outfile.write(reinterpret_cast<const char*>(lap.data()), lap_size * sizeof(TelemetrySnapshot));
             if (outfile.fail()) {
                 outfile.close();
-                return String("Write error while writing telemetry data for lap " + String::num_uint64(idx) + " (snapshots: " + String::num_uint64(lap_size) + ") to '" + String(filename) + "'");
+                return String("Write error while writing telemetry data for lap " + String::num_uint64(idx) + " (snapshots: " + String::num_uint64(lap_size) + ") to '" + os_path + "'");
             }
         }
     }
@@ -286,15 +297,17 @@ String ACTelemetry::finish_logging() {
     outfile.close();
     sessions_data.clear(); // free ram after saving
 
-    return String(filename);
+    return os_path;
 }
 
-String ACTelemetry::load_session_data(String bin_file_path) {
+String ACTelemetry::load_session_data(String file_path) {
+    if (file_path.is_empty()) return String("File path is empty.");
+
     // clear previous data
     loaded_data.clear();
 
     // convert godot path (res:// or user://) to filesystem path if needed
-    String os_path = bin_file_path;
+    String os_path = file_path;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }

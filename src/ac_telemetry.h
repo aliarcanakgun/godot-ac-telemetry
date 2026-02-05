@@ -201,9 +201,9 @@ namespace godot {
         void disconnect_from_ac();
         
         void start_logging();
-        String finish_logging();
+        String finish_logging(String output_file_path);
 
-        String load_session_data(String bin_file_path);
+        String load_session_data(String file_path);
 
         float get_speed(); // simple test function
     };
