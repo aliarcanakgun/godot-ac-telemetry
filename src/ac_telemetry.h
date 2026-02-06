@@ -143,13 +143,13 @@ namespace godot {
         bool aidAutoBlip = false;
     };
 
-    #pragma pack(pop)
-
     struct TelemetrySnapshot {
         double timestamp;
         SPagePhysics physics;
         SPageGraphic graphic;
     };
+
+    #pragma pack(pop)
 
     class ACTelemetry : public Node {
         GDCLASS(ACTelemetry, Node)

@@ -279,11 +279,11 @@ String ACTelemetry::finish_logging(String output_file_path) {
     outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
     if (outfile.fail()) {
         outfile.close();
-        return String("Write error while writing total_laps (" + String::num_uint64(total_laps) + ") to '" + os_path + "'");
+        return String("Write error while writing total_laps (" + String::num_int64(total_laps) + ") to '" + os_path + "'");
     }
 
     // write sessions (include lap index in messages)
-    for (size_t idx = 0; idx < sessions_data.size(); ++idx) {
+    for (uint64_t idx = 0; idx < sessions_data.size(); ++idx) {
         const auto &lap = sessions_data[idx];
         uint64_t lap_size = static_cast<uint64_t>(lap.size());
         outfile.write(reinterpret_cast<const char*>(&lap_size), sizeof(lap_size));
@@ -358,7 +358,7 @@ String ACTelemetry::load_session_data(String file_path) {
 
     // read total laps count
     loaded_session_lap_count = 0;
-    infile.read(reinterpret_cast<char*>(&loaded_session_lap_count), sizeof(loaded_session_lap_count));
+    infile.read(reinterpret_cast<char*>(&loaded_session_lap_count), sizeof(uint64_t));
     if (infile.fail()) {
         infile.close();
         return String("Failed to read total laps count");
