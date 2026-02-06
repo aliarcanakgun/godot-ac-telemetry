@@ -11,4 +11,4 @@ demo/addons/ac-telemetry/bin/*
 !demo/addons/ac-telemetry/bin/*.gdextension
 
 # Development Files
-demo/last_session_data.bin
+demo/lap.bin
