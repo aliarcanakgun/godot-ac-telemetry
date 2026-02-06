@@ -6,3 +6,9 @@
 script = ExtResource("1_yqvsc")
 
 [node name="ACTelemetry" type="ACTelemetry" parent="." unique_id=285519553]
+
+[node name="Label" type="Label" parent="." unique_id=1675260450]
+offset_left = 55.0
+offset_top = 45.0
+offset_right = 95.0
+offset_bottom = 68.0

@@ -1,11 +1,38 @@
 extends Node
 
+var loaded_data: Array
+var last_i := 0
+var accum := 0.0
+
 func _ready() -> void:
-	await get_tree().create_timer(1).timeout
-	print($ACTelemetry.load_session_data("res://lap.bin"))
-	print($ACTelemetry.get_loaded_session_lap_count())
-	print($ACTelemetry.get_loaded_session_sample_interval())
-	#print($ACTelemetry.get_loaded_session_lap_data())
+	if !$ACTelemetry.load_session_data("res://lap.bin").is_empty(): return
+	loaded_data = $ACTelemetry.get_loaded_session_lap_data(0)
+
+func _process(delta: float) -> void:
+	if !loaded_data: return
+	
+	accum += delta
+	if accum < 0.02: return
+	
+	accum -= 0.02
+	
+	var snapshot = loaded_data[last_i]
+	$Label.text = str(int(snapshot.physics.speedKmh))
+	if last_i < loaded_data.size()-1:
+		last_i += 1
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #var timer: Timer
 #
