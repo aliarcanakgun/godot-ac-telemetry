@@ -212,6 +212,11 @@ namespace godot {
         int get_loaded_session_lap_count();
         double get_loaded_session_sample_interval();
         void close_loaded_session();
+
+        static Dictionary _snapshot_to_dict(const TelemetrySnapshot &s);
+        static Dictionary _physics_to_dict(const SPagePhysics &p);
+        static Dictionary _graphic_to_dict(const SPageGraphic &g);
+        static Dictionary _static_to_dict(const SPageStatic &s);
     };
 
 }

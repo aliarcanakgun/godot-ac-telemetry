@@ -432,7 +432,7 @@ void ACTelemetry::close_loaded_session() {
 }
 
 
-static Dictionary _snapshot_to_dict(const TelemetrySnapshot &s) {
+Dictionary ACTelemetry::_snapshot_to_dict(const TelemetrySnapshot &s) {
     Dictionary d;
     d["timestamp"] = s.timestamp;
     d["physics"] = _physics_to_dict(s.physics);
@@ -440,7 +440,7 @@ static Dictionary _snapshot_to_dict(const TelemetrySnapshot &s) {
     return d;
 }
 
-static Dictionary _physics_to_dict(const SPagePhysics &p) {
+Dictionary ACTelemetry::_physics_to_dict(const SPagePhysics &p) {
     Dictionary d;
 
     d["packetId"] = p.packetId;
@@ -483,7 +483,7 @@ static Dictionary _physics_to_dict(const SPagePhysics &p) {
     return d;
 }
 
-static Dictionary _graphic_to_dict(const SPageGraphic &g) {
+Dictionary ACTelemetry::_graphic_to_dict(const SPageGraphic &g) {
     Dictionary d;
 
     d["packetId"] = g.packetId;
@@ -523,7 +523,7 @@ static Dictionary _graphic_to_dict(const SPageGraphic &g) {
     return d;
 }
 
-static Dictionary _static_to_dict(const SPageStatic &s) {
+Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {
     Dictionary d;
 
     d["smVersion"] = wchar_to_gdstring(s.smVersion, 15);
