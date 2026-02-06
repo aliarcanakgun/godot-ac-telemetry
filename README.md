@@ -30,7 +30,7 @@ scons platform=windows target=template_release
 * **This extension is not production-ready yet,** but the core system is implemented.
 
 ### Public functions & properties:
-* ** These functions will be updated soon**
+* **This list will be updated soon...**
 * `connect_to_ac()`: Attempts to open and map Assetto Corsa's shared memory pages. Returns "" on success or an error string on failure.
 * `disconnect_from_ac()`: Unmaps and closes any shared-memory handles and marks the node disconnected.
 * `start_logging()`: Clears previous session data and begins collecting telemetry snapshots into in-memory per-lap vectors.
