@@ -2,12 +2,11 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include "telemetry_data_structs.h"
+#include "telemetry_enums.h"
 
 namespace godot {
     class GDTelemetrySnapshot : public RefCounted {
         GDCLASS(GDTelemetrySnapshot, RefCounted)
-
-    private:
 
     protected:
         static void _bind_methods();
@@ -60,8 +59,8 @@ namespace godot {
         float physics_airDensity = 0;
 
         int graphic_packetId = 0;
-        // int graphic_status = 0;
-        // int graphic_session = 0;
+        // ACStatusType graphic_status = ACStatusType::STATUS_OFF;
+        ACSessionType graphic_session = ACSessionType::SESSION_UNKNOWN;
         String graphic_currentTime;
         String graphic_lastTime;
         String graphic_bestTime;
@@ -83,7 +82,7 @@ namespace godot {
         float graphic_normalizedCarPosition = 0;
         Vector3 graphic_carCoordinates;
         float graphic_penaltyTime = 0;
-        int graphic_flag = 0;
+        ACFlagType graphic_flag = ACFlagType::FLAG_NONE;
         // int graphic_idealLineOn = 0;
         int graphic_isInPitLane = 0;
 
@@ -131,7 +130,7 @@ namespace godot {
         float get_physics_airDensity() const;
 
         int get_graphic_packetId() const;
-        int get_graphic_status() const;
+        // int get_graphic_status() const;
         int get_graphic_session() const;
         String get_graphic_currentTime() const;
         String get_graphic_lastTime() const;

@@ -94,7 +94,7 @@ void GDTelemetrySnapshot::_bind_methods() {
 
     ClassDB::bind_method(D_METHOD("get_graphic_packetId"), &GDTelemetrySnapshot::get_graphic_packetId);
     // ClassDB::bind_method(D_METHOD("get_graphic_status"), &GDTelemetrySnapshot::get_graphic_status);
-    // ClassDB::bind_method(D_METHOD("get_graphic_session"), &GDTelemetrySnapshot::get_graphic_session);
+    ClassDB::bind_method(D_METHOD("get_graphic_session"), &GDTelemetrySnapshot::get_graphic_session);
     ClassDB::bind_method(D_METHOD("get_graphic_currentTime"), &GDTelemetrySnapshot::get_graphic_currentTime);
     ClassDB::bind_method(D_METHOD("get_graphic_lastTime"), &GDTelemetrySnapshot::get_graphic_lastTime);
     ClassDB::bind_method(D_METHOD("get_graphic_bestTime"), &GDTelemetrySnapshot::get_graphic_bestTime);
@@ -122,7 +122,7 @@ void GDTelemetrySnapshot::_bind_methods() {
 
     ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_packetId"), "", "get_graphic_packetId");
     // ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_status"), "", "get_graphic_status");
-    // ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_session"), "", "get_graphic_session");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_session"), "", "get_graphic_session");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "graphic_currentTime"), "", "get_graphic_currentTime");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "graphic_lastTime"), "", "get_graphic_lastTime");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "graphic_bestTime"), "", "get_graphic_bestTime");
@@ -192,10 +192,8 @@ void GDTelemetrySnapshot::fill_from_snapshot(const TelemetrySnapshot &s) {
 
     // graphic
     graphic_packetId = s.graphic.packetId;
-    
-    // graphic_status = (int)s.graphic.status;
-    // graphic_session = (int)s.graphic.session;
-
+    // graphic_status = (ACStatusType)s.graphic.status;
+    graphic_session = (ACSessionType)s.graphic.session;
     graphic_currentTime = wchar_to_gdstring(s.graphic.currentTime, 15);
     graphic_lastTime = wchar_to_gdstring(s.graphic.lastTime, 15);
     graphic_bestTime = wchar_to_gdstring(s.graphic.bestTime, 15);
@@ -212,16 +210,12 @@ void GDTelemetrySnapshot::fill_from_snapshot(const TelemetrySnapshot &s) {
     graphic_lastSectorTime = s.graphic.lastSectorTime;
     graphic_numberOfLaps = s.graphic.numberOfLaps;
     graphic_tyreCompound = wchar_to_gdstring(s.graphic.tyreCompound, 33);
-
     // graphic_replayTimeMultiplier = s.graphic.replayTimeMultiplier;
-
     graphic_normalizedCarPosition = s.graphic.normalizedCarPosition;
     graphic_carCoordinates = Vector3(s.graphic.carCoordinates[0], s.graphic.carCoordinates[1], s.graphic.carCoordinates[2]);
     graphic_penaltyTime = s.graphic.penaltyTime;
-    graphic_flag = (int)s.graphic.flag;
-    
+    graphic_flag = (ACFlagType)s.graphic.flag;
     //graphic_idealLineOn = s.graphic.idealLineOn;
-
     graphic_isInPitLane = s.graphic.isInPitLane;
     graphic_surfaceGrip = s.graphic.surfaceGrip;
 }
@@ -268,7 +262,7 @@ float GDTelemetrySnapshot::get_physics_airDensity() const { return physics_airDe
 
 int GDTelemetrySnapshot::get_graphic_packetId() const { return graphic_packetId; }
 // int GDTelemetrySnapshot::get_graphic_status() const { return graphic_status; }
-// int GDTelemetrySnapshot::get_graphic_session() const { return graphic_session; }
+int GDTelemetrySnapshot::get_graphic_session() const { return graphic_session; }
 String GDTelemetrySnapshot::get_graphic_currentTime() const { return graphic_currentTime; }
 String GDTelemetrySnapshot::get_graphic_lastTime() const { return graphic_lastTime; }
 String GDTelemetrySnapshot::get_graphic_bestTime() const { return graphic_bestTime; }

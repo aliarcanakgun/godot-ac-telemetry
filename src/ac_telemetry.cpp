@@ -38,6 +38,28 @@ ACTelemetry::~ACTelemetry() {
 }
 
 void ACTelemetry::_bind_methods() {
+    BIND_ENUM_CONSTANT(STATUS_OFF);
+    BIND_ENUM_CONSTANT(STATUS_REPLAY);
+    BIND_ENUM_CONSTANT(STATUS_LIVE);
+    BIND_ENUM_CONSTANT(STATUS_PAUSE);
+
+    BIND_ENUM_CONSTANT(SESSION_UNKNOWN);
+    BIND_ENUM_CONSTANT(SESSION_PRACTICE);
+    BIND_ENUM_CONSTANT(SESSION_QUALIFY);
+    BIND_ENUM_CONSTANT(SESSION_RACE);
+    BIND_ENUM_CONSTANT(SESSION_HOTLAP);
+    BIND_ENUM_CONSTANT(SESSION_TIME_ATTACK);
+    BIND_ENUM_CONSTANT(SESSION_DRIFT);
+    BIND_ENUM_CONSTANT(SESSION_DRAG);
+
+    BIND_ENUM_CONSTANT(FLAG_NONE);
+    BIND_ENUM_CONSTANT(FLAG_BLUE);
+    BIND_ENUM_CONSTANT(FLAG_YELLOW);
+    BIND_ENUM_CONSTANT(FLAG_BLACK);
+    BIND_ENUM_CONSTANT(FLAG_WHITE);
+    BIND_ENUM_CONSTANT(FLAG_CHECKERED);
+    BIND_ENUM_CONSTANT(FLAG_PENALTY);
+
     ClassDB::bind_method(D_METHOD("connect_to_ac"), &ACTelemetry::connect_to_ac);
     ClassDB::bind_method(D_METHOD("disconnect_from_ac"), &ACTelemetry::disconnect_from_ac);
 
@@ -437,98 +459,6 @@ void ACTelemetry::close_loaded_session() {
     loaded_session_lap_count = -1;
     
     loaded_session_static_data = {};
-}
-
-
-Dictionary ACTelemetry::_snapshot_to_dict(const TelemetrySnapshot &s) {
-    Dictionary d;
-    d["timestamp"] = s.timestamp;
-    d["physics"] = _physics_to_dict(s.physics);
-    d["graphic"] = _graphic_to_dict(s.graphic);
-    return d;
-}
-
-Dictionary ACTelemetry::_physics_to_dict(const SPagePhysics &p) {
-    Dictionary d;
-
-    d["packetId"] = p.packetId;
-    d["gas"] = p.gas;
-    d["brake"] = p.brake;
-    d["fuel"] = p.fuel;
-    d["gear"] = p.gear;
-    d["rpms"] = p.rpms;
-    d["steerAngle"] = p.steerAngle;
-    d["speedKmh"] = p.speedKmh;
-    d["velocity"] = Vector3(p.velocity[0], p.velocity[1], p.velocity[2]);
-    d["accG"] = Vector3(p.accG[0], p.accG[1], p.accG[2]);
-    d["wheelSlip"] = Vector4(p.wheelSlip[0], p.wheelSlip[1], p.wheelSlip[2], p.wheelSlip[3]);
-    d["wheelLoad"] = Vector4(p.wheelLoad[0], p.wheelLoad[1], p.wheelLoad[2], p.wheelLoad[3]);
-    d["wheelsPressure"] = Vector4(p.wheelsPressure[0], p.wheelsPressure[1], p.wheelsPressure[2], p.wheelsPressure[3]);
-    d["wheelAngularSpeed"] = Vector4(p.wheelAngularSpeed[0], p.wheelAngularSpeed[1], p.wheelAngularSpeed[2], p.wheelAngularSpeed[3]);
-    d["tyreWear"] = Vector4(p.tyreWear[0], p.tyreWear[1], p.tyreWear[2], p.tyreWear[3]);
-    d["tyreDirtyLevel"] = Vector4(p.tyreDirtyLevel[0], p.tyreDirtyLevel[1], p.tyreDirtyLevel[2], p.tyreDirtyLevel[3]);
-    d["tyreCoreTemperature"] = Vector4(p.tyreCoreTemperature[0], p.tyreCoreTemperature[1], p.tyreCoreTemperature[2], p.tyreCoreTemperature[3]);
-    d["camberRAD"] = Vector4(p.camberRAD[0], p.camberRAD[1], p.camberRAD[2], p.camberRAD[3]);
-    d["suspensionTravel"] = Vector4(p.suspensionTravel[0], p.suspensionTravel[1], p.suspensionTravel[2], p.suspensionTravel[3]);
-    d["drs"] = p.drs;
-    d["tc"] = p.tc;
-    d["heading"] = p.heading;
-    d["pitch"] = p.pitch;
-    d["roll"] = p.roll;
-    d["cgHeight"] = p.cgHeight;
-    d["carDamage"] = Vector4(p.carDamage[0], p.carDamage[1], p.carDamage[2], p.carDamage[3]); // actually it's a float[5] but first 4 is valid (according to net)
-    d["numberOfTyresOut"] = p.numberOfTyresOut;
-    d["pitLimiterOn"] = p.pitLimiterOn;
-    d["abs"] = p.abs;
-    d["kersCharge"] = p.kersCharge;
-    d["kersInput"] = p.kersInput;
-    d["autoShifterOn"] = p.autoShifterOn;
-    d["rideHeight"] = Vector2(p.rideHeight[0], p.rideHeight[1]);
-    d["turboBoost"] = p.turboBoost;
-    d["ballast"] = p.ballast;
-    d["airDensity"] = p.airDensity;
-
-    return d;
-}
-
-Dictionary ACTelemetry::_graphic_to_dict(const SPageGraphic &g) {
-    Dictionary d;
-
-    d["packetId"] = g.packetId;
-    
-    // d["status"] = (int)g.status;
-    // d["session"] = (int)g.session;
-
-    d["currentTime"] = wchar_to_gdstring(g.currentTime, 15);
-    d["lastTime"] = wchar_to_gdstring(g.lastTime, 15);
-    d["bestTime"] = wchar_to_gdstring(g.bestTime, 15);
-    d["split"] = wchar_to_gdstring(g.split, 15);
-    d["completedLaps"] = g.completedLaps;
-    d["position"] = g.position;
-    d["iCurrentTime"] = g.iCurrentTime;
-    d["iLastTime"] = g.iLastTime;
-    d["iBestTime"] = g.iBestTime;
-    d["sessionTimeLeft"] = g.sessionTimeLeft;
-    d["distanceTraveled"] = g.distanceTraveled;
-    d["isInPit"] = g.isInPit;
-    d["currentSectorIndex"] = g.currentSectorIndex;
-    d["lastSectorTime"] = g.lastSectorTime;
-    d["numberOfLaps"] = g.numberOfLaps;
-    d["tyreCompound"] = wchar_to_gdstring(g.tyreCompound, 33);
-
-    // d["replayTimeMultiplier"] = g.replayTimeMultiplier;
-
-    d["normalizedCarPosition"] = g.normalizedCarPosition;
-    d["carCoordinates"] = Vector3(g.carCoordinates[0], g.carCoordinates[1], g.carCoordinates[2]);
-    d["penaltyTime"] = g.penaltyTime;
-    d["flag"] = (int)g.flag;
-    
-    //d["idealLineOn"] = g.idealLineOn;
-
-    d["isInPitLane"] = g.isInPitLane;
-    d["surfaceGrip"] = g.surfaceGrip;
-
-    return d;
 }
 
 Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {

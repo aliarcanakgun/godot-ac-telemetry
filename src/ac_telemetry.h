@@ -2,6 +2,7 @@
 
 #include <godot_cpp/classes/node.hpp>
 #include "telemetry_data_structs.h"
+#include "telemetry_enums.h"
 #include "gd_telemetry_snapshot.h"
 #include <windows.h>
 #include <vector>
@@ -45,6 +46,7 @@ namespace godot {
         ACTelemetry();
         ~ACTelemetry();
 
+
         void _process(double delta) override;
         
         bool is_connected_to_ac() const; // getter
@@ -76,3 +78,7 @@ namespace godot {
     };
 
 }
+
+VARIANT_ENUM_CAST(ACStatusType);
+VARIANT_ENUM_CAST(ACSessionType);
+VARIANT_ENUM_CAST(ACFlagType);
