@@ -1,4 +1,5 @@
 #include "ac_telemetry.h"
+#include "gd_telemetry_snapshot.h"
 #include "register_types.h"
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
@@ -12,6 +13,7 @@ void initialize_ac_module(ModuleInitializationLevel p_level) {
 	}
     
 	GDREGISTER_CLASS(ACTelemetry);
+	GDREGISTER_RUNTIME_CLASS(GDTelemetrySnapshot);
 }
 
 void uninitialize_ac_module(ModuleInitializationLevel p_level) {

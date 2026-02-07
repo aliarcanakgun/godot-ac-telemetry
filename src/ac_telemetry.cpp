@@ -1,5 +1,8 @@
 #include "ac_telemetry.h"
+#include "telemetry_data_structs.h"
+#include "gd_telemetry_snapshot.h"
 #include "helper.h"
+
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <fstream>
@@ -394,20 +397,24 @@ String ACTelemetry::load_session_data(String file_path) {
     return String("");
 }
 
-Array ACTelemetry::get_loaded_session_lap_data(int lap_index) {
-    if (lap_index < 0 || lap_index >= loaded_session_data.size()) return Array();
+TypedArray<GDTelemetrySnapshot> ACTelemetry::get_loaded_session_lap_data(int lap_index) {
+    if (lap_index < 0 || lap_index >= loaded_session_data.size()) return TypedArray<GDTelemetrySnapshot>();
 
     const auto &lap = loaded_session_data[lap_index];
     const int64_t count = (int64_t)lap.size();
 
-    Array output;
-    output.resize(count);
+    TypedArray<GDTelemetrySnapshot> out;
+    out.resize(count);
 
     for (int64_t i = 0; i < count; ++i) {
-        output[i] = _snapshot_to_dict(lap[i]);
+        Ref<GDTelemetrySnapshot> data;
+        data.instantiate();
+        data->fill_from_snapshot(lap[i]);
+
+        out[i] = data;
     }
 
-    return output;
+    return out;
 }
 
 Dictionary ACTelemetry::get_loaded_session_static_data() {
