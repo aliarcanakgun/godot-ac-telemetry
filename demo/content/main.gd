@@ -1,6 +1,6 @@
 extends Node
 
-var loaded_data: Array
+var loaded_data: Array[GDTelemetrySnapshot]
 var last_i := 0
 var accum := 0.0
 
@@ -17,7 +17,8 @@ func _process(delta: float) -> void:
 	accum -= 0.02
 	
 	var snapshot = loaded_data[last_i]
-	$Label.text = str(int(snapshot.physics.speedKmh))
+	$Label.text = str(int(snapshot.physics_speedKmh))
+	#$Label.text = "%0.2f" % snapshot.graphic_normalizedCarPosition
 	if last_i < loaded_data.size()-1:
 		last_i += 1
 
