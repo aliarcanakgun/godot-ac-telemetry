@@ -44,5 +44,5 @@ scons platform=windows target=template_release
 ### Data & file notes:
 
 * Telemetry structures:: `SPagePhysics`, `SPageGraphic` and `SPageStatic` match the memory layout expected from Assetto Corsa (packed with 4-byte alignment).
-* Output file: `last_session_data.bin` contains serialized `TelemetrySnapshot` sequences organized by laps. Each snapshot captures `SPagePhysics` and `SPageGraphic` data at every `sample_interval`. Snapshots are buffered into a lap-specific vector, which are then stored in a session-wide "main" vector. The entire session is flushed to the binary file only when logging is finished.
+* Output file: Contains serialized `TelemetrySnapshot` sequences organized by laps. Each snapshot captures `SPagePhysics` and `SPageGraphic` data at every `sample_interval`. Snapshots are buffered into a lap-specific vector, which are then stored in a session-wide "main" vector. The entire session is flushed to the binary file only when logging is finished. An example is in the demo project.
 * Platform:: Current implementation uses Win32 APIs (OpenFileMapping, MapViewOfFile, FormatMessage, etc.) and is Windows-only. For cross-platform usage, the IPC layer must be refactored.
