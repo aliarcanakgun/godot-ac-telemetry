@@ -485,8 +485,6 @@ Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {
     d["tyreRadius"] = Vector4(s.tyreRadius[0], s.tyreRadius[1], s.tyreRadius[2], s.tyreRadius[3]);
     d["maxTurboBoost"] = s.maxTurboBoost;
 
-    d["airTemp"] = s.airTemp;
-    d["roadTemp"] = s.roadTemp;
     d["penaltiesEnabled"] = s.penaltiesEnabled;
 
     d["aidFuelRate"] = s.aidFuelRate;
@@ -496,6 +494,25 @@ Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {
     d["aidStability"] = s.aidStability;
     d["aidAutoClutch"] = s.aidAutoClutch;
     d["aidAutoBlip"] = s.aidAutoBlip;
+
+    d["hasDRS"] = s.hasDRS;
+    d["hasERS"] = s.hasERS;
+    d["hasKERS"] = s.hasKERS;
+    d["kersMaxJ"] = s.kersMaxJ;
+    d["engineBrakeSettingsCount"] = s.engineBrakeSettingsCount;
+    d["ersPowerControllerCount"] = s.ersPowerControllerCount;
+    
+    d["trackSPlineLength"] = s.trackSPlineLength;
+    d["trackConfiguration"] = wchar_to_gdstring(s.trackConfiguration, 33);
+    
+    d["ersMaxJ"] = s.ersMaxJ;
+    d["isTimedRace"] = s.isTimedRace;
+    d["hasExtraLap"] = s.hasExtraLap;
+    d["carSkin"] = wchar_to_gdstring(s.carSkin, 33);
+    d["reversedGridPositions"] = s.reversedGridPositions;
+    d["pitWindowStart"] = s.pitWindowStart;
+    d["pitWindowEnd"] = s.pitWindowEnd;
+    d["isOnline"] = s.isOnline;
 
     return d;
 }

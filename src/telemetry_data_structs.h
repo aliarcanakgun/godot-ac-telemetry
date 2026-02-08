@@ -66,6 +66,31 @@ struct SPagePhysics {
     float turboBoost = 0;
     float ballast = 0;
     float airDensity = 0;
+
+    float airTemp = 0;
+    float roadTemp = 0;
+    float localAngularVel[3];
+    float finalFF = 0;
+    float performanceMeter = 0;
+    int engineBrake = 0;
+    int ersRecoveryLevel = 0;
+    int ersPowerLevel = 0;
+    int ersHeatCharging = 0;
+    int ersIsCharging = 0;
+    float kersCurrentKJ = 0;
+    int drsAvailable = 0;
+    int drsEnabled = 0;
+    float brakeTemp[4];
+    float clutch = 0;
+    float tyreTempI[4];
+    float tyreTempM[4];
+    float tyreTempO[4];
+    int isAIControlled;
+    float tyreContactPoint[4][3];
+    float tyreContactNormal[4][3];
+    float tyreContactHeading[4][3];
+    float brakeBias;
+    float localVelocity[3];
 };
 
 struct SPageGraphic {
@@ -98,6 +123,10 @@ struct SPageGraphic {
     int isInPitLane = 0;
 
     float surfaceGrip = 0;
+
+    int mandatoryPitDone = 0;
+    float windSpeed = 0;
+    float windDirection = 0;
 };
 
 struct SPageStatic {
@@ -123,17 +152,38 @@ struct SPageStatic {
     float tyreRadius[4];
     float maxTurboBoost = 0;
 
-    float airTemp = 0;
-    float roadTemp = 0;
-    bool penaltiesEnabled = false;
+    float deprecated_1 = 0;
+    float deprecated_2 = 0;
+
+    int penaltiesEnabled = 0;
 
     float aidFuelRate = 0;
     float aidTireRate = 0;
     float aidMechanicalDamage = 0;
-    bool aidAllowTyreBlankets = false;
+    int aidAllowTyreBlankets = 0;
     float aidStability = 0;
-    bool aidAutoClutch = false;
-    bool aidAutoBlip = false;
+    int aidAutoClutch = 0;
+    int aidAutoBlip = 0;
+
+    
+    int hasDRS = 0;
+    int hasERS = 0;
+    int hasKERS = 0;
+    float kersMaxJ = 0;
+    int engineBrakeSettingsCount = 0;
+    int ersPowerControllerCount = 0;
+    
+    float trackSPlineLength = 0;
+    wchar_t trackConfiguration[33];
+    
+    float ersMaxJ = 0;
+    int isTimedRace = 0;
+    int hasExtraLap = 0;
+    wchar_t carSkin[33];
+    int reversedGridPositions = 0;
+    int pitWindowStart = 0;
+    int pitWindowEnd = 0;
+    int isOnline = 0;
 };
 
 struct TelemetrySnapshot {
