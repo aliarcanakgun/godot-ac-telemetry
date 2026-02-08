@@ -110,11 +110,7 @@
         <member name="save_file_signature" type="String" setter="set_save_file_signature" getter="get_save_file_signature" default="&quot;ACTL&quot;"/>
     </members>
     <signals>
-        <signal name="connection_lost">
-            <description>
-                Emitted when the connection to Assetto Corsa is unexpectedly lost during an active logging session.
-            </description>
-        </signal>
+        <signal name="connection_lost"/>
     </signals>
     <constants>
         <constant name="STATUS_OFF" value="0" enum="ACStatusType">
