@@ -58,6 +58,31 @@ namespace godot {
         float physics_ballast = 0;
         float physics_airDensity = 0;
 
+        float physics_airTemp = 0;
+        float physics_roadTemp = 0;
+        Vector3 physics_localAngularVel;
+        float physics_finalFF = 0;
+        float physics_performanceMeter = 0;
+        int physics_engineBrake = 0;
+        int physics_ersRecoveryLevel = 0;
+        int physics_ersPowerLevel = 0;
+        int physics_ersHeatCharging = 0;
+        int physics_ersIsCharging = 0;
+        float physics_kersCurrentKJ = 0;
+        int physics_drsAvailable = 0;
+        int physics_drsEnabled = 0;
+        Vector4 physics_brakeTemp;
+        float physics_clutch = 0;
+        Vector4 physics_tyreTempI;
+        Vector4 physics_tyreTempM;
+        Vector4 physics_tyreTempO;
+        int physics_isAIControlled;
+        PackedVector3Array physics_tyreContactPoint;
+        PackedVector3Array physics_tyreContactNormal;
+        PackedVector3Array physics_tyreContactHeading;
+        float physics_brakeBias;
+        Vector3 physics_localVelocity;
+
         int graphic_packetId = 0;
         // ACStatusType graphic_status = ACStatusType::STATUS_OFF;
         ACSessionType graphic_session = ACSessionType::SESSION_UNKNOWN;
@@ -77,7 +102,6 @@ namespace godot {
         int graphic_lastSectorTime = 0;
         int graphic_numberOfLaps = 0;
         String graphic_tyreCompound;
-
         // float graphic_replayTimeMultiplier = 0;
         float graphic_normalizedCarPosition = 0;
         Vector3 graphic_carCoordinates;
@@ -85,8 +109,11 @@ namespace godot {
         ACFlagType graphic_flag = ACFlagType::FLAG_NONE;
         // int graphic_idealLineOn = 0;
         int graphic_isInPitLane = 0;
-
         float graphic_surfaceGrip = 0;
+
+        int graphic_mandatoryPitDone = 0;
+        float graphic_windSpeed = 0;
+        float graphic_windDirection = 0;
 
         // getters
 
@@ -129,6 +156,31 @@ namespace godot {
         float get_physics_ballast() const;
         float get_physics_airDensity() const;
 
+        float get_physics_airTemp() const;
+        float get_physics_roadTemp() const;
+        Vector3 get_physics_localAngularVel() const;
+        float get_physics_finalFF() const;
+        float get_physics_performanceMeter() const;
+        int get_physics_engineBrake() const;
+        int get_physics_ersRecoveryLevel() const;
+        int get_physics_ersPowerLevel() const;
+        int get_physics_ersHeatCharging() const;
+        int get_physics_ersIsCharging() const;
+        float get_physics_kersCurrentKJ() const;
+        int get_physics_drsAvailable() const;
+        int get_physics_drsEnabled() const;
+        Vector4 get_physics_brakeTemp() const;
+        float get_physics_clutch() const;
+        Vector4 get_physics_tyreTempI() const;
+        Vector4 get_physics_tyreTempM() const;
+        Vector4 get_physics_tyreTempO() const;
+        int get_physics_isAIControlled() const;
+        PackedVector3Array get_physics_tyreContactPoint() const;
+        PackedVector3Array get_physics_tyreContactNormal() const;
+        PackedVector3Array get_physics_tyreContactHeading() const;
+        float get_physics_brakeBias() const;
+        Vector3 get_physics_localVelocity() const;
+
         int get_graphic_packetId() const;
         // int get_graphic_status() const;
         int get_graphic_session() const;
@@ -156,5 +208,9 @@ namespace godot {
         int get_graphic_idealLineOn() const;
         int get_graphic_isInPitLane() const;
         float get_graphic_surfaceGrip() const;
+
+        int get_graphic_mandatoryPitDone() const;
+        float get_graphic_windSpeed() const;
+        float get_graphic_windDirection() const;
     };
 }

@@ -53,6 +53,31 @@ void GDTelemetrySnapshot::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_physics_ballast"), &GDTelemetrySnapshot::get_physics_ballast);
     ClassDB::bind_method(D_METHOD("get_physics_airDensity"), &GDTelemetrySnapshot::get_physics_airDensity);
 
+    ClassDB::bind_method(D_METHOD("get_physics_airTemp"), &GDTelemetrySnapshot::get_physics_airTemp);
+    ClassDB::bind_method(D_METHOD("get_physics_roadTemp"), &GDTelemetrySnapshot::get_physics_roadTemp);
+    ClassDB::bind_method(D_METHOD("get_physics_localAngularVel"), &GDTelemetrySnapshot::get_physics_localAngularVel);
+    ClassDB::bind_method(D_METHOD("get_physics_finalFF"), &GDTelemetrySnapshot::get_physics_finalFF);
+    ClassDB::bind_method(D_METHOD("get_physics_performanceMeter"), &GDTelemetrySnapshot::get_physics_performanceMeter);
+    ClassDB::bind_method(D_METHOD("get_physics_engineBrake"), &GDTelemetrySnapshot::get_physics_engineBrake);
+    ClassDB::bind_method(D_METHOD("get_physics_ersRecoveryLevel"), &GDTelemetrySnapshot::get_physics_ersRecoveryLevel);
+    ClassDB::bind_method(D_METHOD("get_physics_ersPowerLevel"), &GDTelemetrySnapshot::get_physics_ersPowerLevel);
+    ClassDB::bind_method(D_METHOD("get_physics_ersHeatCharging"), &GDTelemetrySnapshot::get_physics_ersHeatCharging);
+    ClassDB::bind_method(D_METHOD("get_physics_ersIsCharging"), &GDTelemetrySnapshot::get_physics_ersIsCharging);
+    ClassDB::bind_method(D_METHOD("get_physics_kersCurrentKJ"), &GDTelemetrySnapshot::get_physics_kersCurrentKJ);
+    ClassDB::bind_method(D_METHOD("get_physics_drsAvailable"), &GDTelemetrySnapshot::get_physics_drsAvailable);
+    ClassDB::bind_method(D_METHOD("get_physics_drsEnabled"), &GDTelemetrySnapshot::get_physics_drsEnabled);
+    ClassDB::bind_method(D_METHOD("get_physics_brakeTemp"), &GDTelemetrySnapshot::get_physics_brakeTemp);
+    ClassDB::bind_method(D_METHOD("get_physics_clutch"), &GDTelemetrySnapshot::get_physics_clutch);
+    ClassDB::bind_method(D_METHOD("get_physics_tyreTempI"), &GDTelemetrySnapshot::get_physics_tyreTempI);
+    ClassDB::bind_method(D_METHOD("get_physics_tyreTempM"), &GDTelemetrySnapshot::get_physics_tyreTempM);
+    ClassDB::bind_method(D_METHOD("get_physics_tyreTempO"), &GDTelemetrySnapshot::get_physics_tyreTempO);
+    ClassDB::bind_method(D_METHOD("get_physics_isAIControlled"), &GDTelemetrySnapshot::get_physics_isAIControlled);
+    ClassDB::bind_method(D_METHOD("get_physics_tyreContactPoint"), &GDTelemetrySnapshot::get_physics_tyreContactPoint);
+    ClassDB::bind_method(D_METHOD("get_physics_tyreContactNormal"), &GDTelemetrySnapshot::get_physics_tyreContactNormal);
+    ClassDB::bind_method(D_METHOD("get_physics_tyreContactHeading"), &GDTelemetrySnapshot::get_physics_tyreContactHeading);
+    ClassDB::bind_method(D_METHOD("get_physics_brakeBias"), &GDTelemetrySnapshot::get_physics_brakeBias);
+    ClassDB::bind_method(D_METHOD("get_physics_localVelocity"), &GDTelemetrySnapshot::get_physics_localVelocity);
+
     ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_packetId"), "", "get_physics_packetId");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_gas"), "", "get_physics_gas");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_brake"), "", "get_physics_brake");
@@ -90,6 +115,31 @@ void GDTelemetrySnapshot::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_ballast"), "", "get_physics_ballast");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_airDensity"), "", "get_physics_airDensity");
 
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_airTemp"), "", "get_physics_airTemp");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_roadTemp"), "", "get_physics_roadTemp");
+    ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "physics_localAngularVel"), "", "get_physics_localAngularVel");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_finalFF"), "", "get_physics_finalFF");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_performanceMeter"), "", "get_physics_performanceMeter");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_engineBrake"), "", "get_physics_engineBrake");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_ersRecoveryLevel"), "", "get_physics_ersRecoveryLevel");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_ersPowerLevel"), "", "get_physics_ersPowerLevel");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_ersHeatCharging"), "", "get_physics_ersHeatCharging");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_ersIsCharging"), "", "get_physics_ersIsCharging");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_kersCurrentKJ"), "", "get_physics_kersCurrentKJ");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_drsAvailable"), "", "get_physics_drsAvailable");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_drsEnabled"), "", "get_physics_drsEnabled");
+    ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "physics_brakeTemp"), "", "get_physics_brakeTemp");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_clutch"), "", "get_physics_clutch");
+    ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "physics_tyreTempI"), "", "get_physics_tyreTempI");
+    ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "physics_tyreTempM"), "", "get_physics_tyreTempM");
+    ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "physics_tyreTempO"), "", "get_physics_tyreTempO");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "physics_isAIControlled"), "", "get_physics_isAIControlled");
+    ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR3_ARRAY, "physics_tyreContactPoint"), "", "get_physics_tyreContactPoint");
+    ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR3_ARRAY, "physics_tyreContactNormal"), "", "get_physics_tyreContactNormal");
+    ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR3_ARRAY, "physics_tyreContactHeading"), "", "get_physics_tyreContactHeading");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "physics_brakeBias"), "", "get_physics_brakeBias");
+    ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "physics_localVelocity"), "", "get_physics_localVelocity");
+
 
 
     ClassDB::bind_method(D_METHOD("get_graphic_packetId"), &GDTelemetrySnapshot::get_graphic_packetId);
@@ -119,6 +169,10 @@ void GDTelemetrySnapshot::_bind_methods() {
     // ClassDB::bind_method(D_METHOD("get_graphic_idealLineOn"), &GDTelemetrySnapshot::get_graphic_idealLineOn);
     ClassDB::bind_method(D_METHOD("get_graphic_isInPitLane"), &GDTelemetrySnapshot::get_graphic_isInPitLane);
     ClassDB::bind_method(D_METHOD("get_graphic_surfaceGrip"), &GDTelemetrySnapshot::get_graphic_surfaceGrip);
+    
+    ClassDB::bind_method(D_METHOD("get_graphic_mandatoryPitDone"), &GDTelemetrySnapshot::get_graphic_mandatoryPitDone);
+    ClassDB::bind_method(D_METHOD("get_graphic_windSpeed"), &GDTelemetrySnapshot::get_graphic_windSpeed);
+    ClassDB::bind_method(D_METHOD("get_graphic_windDirection"), &GDTelemetrySnapshot::get_graphic_windDirection);
 
     ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_packetId"), "", "get_graphic_packetId");
     // ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_status"), "", "get_graphic_status");
@@ -147,6 +201,10 @@ void GDTelemetrySnapshot::_bind_methods() {
     // ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_idealLineOn"), "", "get_graphic_idealLineOn");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_isInPitLane"), "", "get_graphic_isInPitLane");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "graphic_surfaceGrip"), "", "get_graphic_surfaceGrip");
+
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "graphic_mandatoryPitDone"), "", "get_graphic_mandatoryPitDone");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "graphic_windSpeed"), "", "get_graphic_windSpeed");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "graphic_windDirection"), "", "get_graphic_windDirection");
 }
 
 void GDTelemetrySnapshot::fill_from_snapshot(const TelemetrySnapshot &s) {
@@ -190,6 +248,39 @@ void GDTelemetrySnapshot::fill_from_snapshot(const TelemetrySnapshot &s) {
     physics_ballast = s.physics.ballast;
     physics_airDensity = s.physics.airDensity;
 
+    physics_airTemp = s.physics.airTemp;
+    physics_roadTemp = s.physics.roadTemp;
+    physics_localAngularVel = Vector3(s.physics.localAngularVel[0], s.physics.localAngularVel[1], s.physics.localAngularVel[2]);
+    physics_finalFF = s.physics.finalFF;
+    physics_performanceMeter = s.physics.performanceMeter;
+    physics_engineBrake = s.physics.engineBrake;
+    physics_ersRecoveryLevel = s.physics.ersRecoveryLevel;
+    physics_ersPowerLevel = s.physics.ersPowerLevel;
+    physics_ersHeatCharging = s.physics.ersHeatCharging;
+    physics_ersIsCharging = s.physics.ersIsCharging;
+    physics_kersCurrentKJ = s.physics.kersCurrentKJ;
+    physics_drsAvailable = s.physics.drsAvailable;
+    physics_drsEnabled = s.physics.drsEnabled;
+    physics_brakeTemp = Vector4(s.physics.brakeTemp[0], s.physics.brakeTemp[1], s.physics.brakeTemp[2], s.physics.brakeTemp[3]);
+    physics_clutch = s.physics.clutch;
+    physics_tyreTempI = Vector4(s.physics.tyreTempI[0], s.physics.tyreTempI[1], s.physics.tyreTempI[2], s.physics.tyreTempI[3]);
+    physics_tyreTempM = Vector4(s.physics.tyreTempM[0], s.physics.tyreTempM[1], s.physics.tyreTempM[2], s.physics.tyreTempM[3]);
+    physics_tyreTempO = Vector4(s.physics.tyreTempO[0], s.physics.tyreTempO[1], s.physics.tyreTempO[2], s.physics.tyreTempO[3]);
+    physics_isAIControlled = s.physics.isAIControlled;
+
+    // tyreContactPoint, tyreContactNormal, tyreContactHeading arrays - convert to PackedVector3Array
+    physics_tyreContactPoint.clear();
+    physics_tyreContactNormal.clear();
+    physics_tyreContactHeading.clear();
+    for (int i = 0; i < 4; i++) {
+        physics_tyreContactPoint.push_back(Vector3(s.physics.tyreContactPoint[i][0], s.physics.tyreContactPoint[i][1], s.physics.tyreContactPoint[i][2]));
+        physics_tyreContactNormal.push_back(Vector3(s.physics.tyreContactNormal[i][0], s.physics.tyreContactNormal[i][1], s.physics.tyreContactNormal[i][2]));
+        physics_tyreContactHeading.push_back(Vector3(s.physics.tyreContactHeading[i][0], s.physics.tyreContactHeading[i][1], s.physics.tyreContactHeading[i][2]));
+    }
+    
+    physics_brakeBias = s.physics.brakeBias;
+    physics_localVelocity = Vector3(s.physics.localVelocity[0], s.physics.localVelocity[1], s.physics.localVelocity[2]);
+
     // graphic
     graphic_packetId = s.graphic.packetId;
     // graphic_status = (ACStatusType)s.graphic.status;
@@ -218,6 +309,10 @@ void GDTelemetrySnapshot::fill_from_snapshot(const TelemetrySnapshot &s) {
     //graphic_idealLineOn = s.graphic.idealLineOn;
     graphic_isInPitLane = s.graphic.isInPitLane;
     graphic_surfaceGrip = s.graphic.surfaceGrip;
+
+    graphic_mandatoryPitDone = s.graphic.mandatoryPitDone;
+    graphic_windSpeed = s.graphic.windSpeed;
+    graphic_windDirection = s.graphic.windDirection;
 }
 
 
@@ -260,6 +355,31 @@ float GDTelemetrySnapshot::get_physics_turboBoost() const { return physics_turbo
 float GDTelemetrySnapshot::get_physics_ballast() const { return physics_ballast; }
 float GDTelemetrySnapshot::get_physics_airDensity() const { return physics_airDensity; }
 
+float GDTelemetrySnapshot::get_physics_airTemp() const { return physics_airTemp; };
+float GDTelemetrySnapshot::get_physics_roadTemp() const { return physics_roadTemp; };
+Vector3 GDTelemetrySnapshot::get_physics_localAngularVel() const { return physics_localAngularVel; };
+float GDTelemetrySnapshot::get_physics_finalFF() const { return physics_finalFF; };
+float GDTelemetrySnapshot::get_physics_performanceMeter() const { return physics_performanceMeter; };
+int GDTelemetrySnapshot::get_physics_engineBrake() const { return physics_engineBrake; };
+int GDTelemetrySnapshot::get_physics_ersRecoveryLevel() const { return physics_ersRecoveryLevel; };
+int GDTelemetrySnapshot::get_physics_ersPowerLevel() const { return physics_ersPowerLevel; };
+int GDTelemetrySnapshot::get_physics_ersHeatCharging() const { return physics_ersHeatCharging; };
+int GDTelemetrySnapshot::get_physics_ersIsCharging() const { return physics_ersIsCharging; };
+float GDTelemetrySnapshot::get_physics_kersCurrentKJ() const { return physics_kersCurrentKJ; };
+int GDTelemetrySnapshot::get_physics_drsAvailable() const { return physics_drsAvailable; };
+int GDTelemetrySnapshot::get_physics_drsEnabled() const { return physics_drsEnabled; };
+Vector4 GDTelemetrySnapshot::get_physics_brakeTemp() const { return physics_brakeTemp; };
+float GDTelemetrySnapshot::get_physics_clutch() const { return physics_clutch; };
+Vector4 GDTelemetrySnapshot::get_physics_tyreTempI() const { return physics_tyreTempI; };
+Vector4 GDTelemetrySnapshot::get_physics_tyreTempM() const { return physics_tyreTempM; };
+Vector4 GDTelemetrySnapshot::get_physics_tyreTempO() const { return physics_tyreTempO; };
+int GDTelemetrySnapshot::get_physics_isAIControlled() const { return physics_isAIControlled; };
+PackedVector3Array GDTelemetrySnapshot::get_physics_tyreContactPoint() const { return physics_tyreContactPoint; };
+PackedVector3Array GDTelemetrySnapshot::get_physics_tyreContactNormal() const { return physics_tyreContactNormal; };
+PackedVector3Array GDTelemetrySnapshot::get_physics_tyreContactHeading() const { return physics_tyreContactHeading; };
+float GDTelemetrySnapshot::get_physics_brakeBias() const { return physics_brakeBias; };
+Vector3 GDTelemetrySnapshot::get_physics_localVelocity() const { return physics_localVelocity; };
+
 int GDTelemetrySnapshot::get_graphic_packetId() const { return graphic_packetId; }
 // int GDTelemetrySnapshot::get_graphic_status() const { return graphic_status; }
 int GDTelemetrySnapshot::get_graphic_session() const { return graphic_session; }
@@ -287,3 +407,7 @@ int GDTelemetrySnapshot::get_graphic_flag() const { return graphic_flag; }
 // int GDTelemetrySnapshot::get_graphic_idealLineOn() const { return graphic_idealLineOn; }
 int GDTelemetrySnapshot::get_graphic_isInPitLane() const { return graphic_isInPitLane; }
 float GDTelemetrySnapshot::get_graphic_surfaceGrip() const { return graphic_surfaceGrip; }
+
+int GDTelemetrySnapshot::get_graphic_mandatoryPitDone() const { return graphic_mandatoryPitDone; };
+float GDTelemetrySnapshot::get_graphic_windSpeed() const { return graphic_windSpeed; };
+float GDTelemetrySnapshot::get_graphic_windDirection() const { return graphic_windDirection; };
