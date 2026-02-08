@@ -66,6 +66,8 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("start_logging"), &ACTelemetry::start_logging);
     ClassDB::bind_method(D_METHOD("finish_logging", "output_file_path"), &ACTelemetry::finish_logging);
 
+    ClassDB::bind_method(D_METHOD("get_live_static_data"), &ACTelemetry::get_live_static_data);
+
     ClassDB::bind_method(D_METHOD("load_session_data", "file_path"), &ACTelemetry::load_session_data);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_count"), &ACTelemetry::get_loaded_session_lap_count);
     ClassDB::bind_method(D_METHOD("get_loaded_session_sample_interval"), &ACTelemetry::get_loaded_session_sample_interval);
@@ -417,6 +419,12 @@ String ACTelemetry::load_session_data(String file_path) {
 
     infile.close();
     return String("");
+}
+
+Dictionary ACTelemetry::get_live_static_data() {
+    if (!is_logging) return Dictionary();
+    if (!dataStatic) return Dictionary();
+    return _static_to_dict(*dataStatic);
 }
 
 TypedArray<GDTelemetrySnapshot> ACTelemetry::get_loaded_session_lap_data(int lap_index) {
