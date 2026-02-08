@@ -22,6 +22,10 @@ sources = Glob("src/*.cpp")
 # The final path should match a path in the '.gdextension' file.
 lib_filename = "{}ac-telemetry{}{}".format(env.subst('$SHLIBPREFIX'), env["suffix"], env.subst('$SHLIBSUFFIX'))
 
+if env["target"] in ["editor", "template_debug"]:
+    doc_data = env.GodotCPPDocData("src/gen/doc_data.gen.cpp", source=Glob("demo/addons/ac-telemetry/docs/*.xml"))
+    sources.append(doc_data)
+
 # Creates a SCons target for the path with our sources.
 library = env.SharedLibrary(
     "demo/addons/ac-telemetry/bin/{}".format(lib_filename),

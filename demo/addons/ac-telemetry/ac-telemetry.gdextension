@@ -2,6 +2,7 @@
 entry_symbol = "ac_library_init"
 compatibility_minimum = "4.5"
 reloadable = true
+doc_path = "docs"
 
 [libraries]
 windows.debug.x86_64 = "./bin/ac-telemetry.windows.template_debug.x86_64.dll"
@@ -9,3 +10,4 @@ windows.release.x86_64 = "./bin/ac-telemetry.windows.template_release.x86_64.dll
 
 [icons]
 ACTelemetry = "res://addons/ac-telemetry/icon.svg"
+GDTelemetrySnapshot = "res://addons/ac-telemetry/icon.svg"

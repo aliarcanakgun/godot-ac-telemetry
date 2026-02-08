@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GDTelemetrySnapshot" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+    <brief_description>
+        Container for a single telemetry data snapshot from Assetto Corsa.
+    </brief_description>
+    <description>
+        [GDTelemetrySnapshot] represents a moment in time during a racing session, containing detailed physics and graphics data captured at a specific timestamp.
+        
+        Each snapshot includes vehicle dynamics (acceleration, speed, steering), tire information (wear, temperature, slip), and session state (lap times, position, flags).
+    </description>
+    <tutorials>
+    </tutorials>
+    <members>
+        <member name="snapshot_timestamp" type="float" setter="" getter="get_snapshot_timestamp" default="0.0">
+            <description>
+                The time offset from the start of the lap (in seconds).
+            </description>
+        </member>
+        <member name="physics_packetId" type="int" setter="" getter="get_physics_packetId" default="0">
+            <description>
+                Unique identifier for this physics data packet.
+            </description>
+        </member>
+        <member name="physics_gas" type="float" setter="" getter="get_physics_gas" default="0.0">
+            <description>
+                Throttle input normalized to 0.0-1.0 range.
+            </description>
+        </member>
+        <member name="physics_brake" type="float" setter="" getter="get_physics_brake" default="0.0">
+            <description>
+                Brake input normalized to 0.0-1.0 range.
+            </description>
+        </member>
+        <member name="physics_fuel" type="float" setter="" getter="get_physics_fuel" default="0.0">
+            <description>
+                Current fuel level in liters.
+            </description>
+        </member>
+        <member name="physics_gear" type="int" setter="" getter="get_physics_gear" default="0">
+            <description>
+                Current gear (0 for reverse, 1 for neutral, 2 and above for forward gears).
+            </description>
+        </member>
+        <member name="physics_rpms" type="int" setter="" getter="get_physics_rpms" default="0">
+            <description>
+                Engine RPM.
+            </description>
+        </member>
+        <member name="physics_steerAngle" type="float" setter="" getter="get_physics_steerAngle" default="0.0">
+            <description>
+                Steering wheel angle in radians (positive is right turn).
+            </description>
+        </member>
+        <member name="physics_speedKmh" type="float" setter="" getter="get_physics_speedKmh" default="0.0">
+            <description>
+                Vehicle speed in kilometers per hour.
+            </description>
+        </member>
+        <member name="physics_velocity" type="Vector3" setter="" getter="get_physics_velocity" default="Vector3(0, 0, 0)">
+            <description>
+                Velocity vector components in m/s (world related).
+            </description>
+        </member>
+        <member name="physics_accG" type="Vector3" setter="" getter="get_physics_accG" default="Vector3(0, 0, 0)">
+            <description>
+                G-force vector components (local related)
+            </description>
+        </member>
+        <member name="physics_wheelSlip" type="Vector4" setter="" getter="get_physics_wheelSlip" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Spin speed of each tyre (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_wheelLoad" type="Vector4" setter="" getter="get_physics_wheelLoad" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Vertical load on each wheel in Newtons (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_wheelsPressure" type="Vector4" setter="" getter="get_physics_wheelsPressure" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Tire pressure for each wheel in PSI (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_wheelAngularSpeed" type="Vector4" setter="" getter="get_physics_wheelAngularSpeed" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Angular speed of each wheel in rad/s (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_tyreWear" type="Vector4" setter="" getter="get_physics_tyreWear" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Tire wear for each wheel, ranging from 0.0 (fully worn) to 100.0 (new) (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_tyreDirtyLevel" type="Vector4" setter="" getter="get_physics_tyreDirtyLevel" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Dirt level on each tire from 0.0 to 1.0 (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_tyreCoreTemperature" type="Vector4" setter="" getter="get_physics_tyreCoreTemperature" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Core temperature of each tire in Celsius (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_camberRAD" type="Vector4" setter="" getter="get_physics_camberRAD" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Camber angle for each wheel in radians (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_suspensionTravel" type="Vector4" setter="" getter="get_physics_suspensionTravel" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Suspension compression distance for each wheel in meters (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_drs" type="float" setter="" getter="get_physics_drs" default="0.0">
+            <description>
+                DRS state: 0 (closed) or 1 (open). Only valid if DRS is available on the car.
+            </description>
+        </member>
+        <member name="physics_tc" type="float" setter="" getter="get_physics_tc" default="0.0">
+            <description>
+                Slip ratio limit for the traction control (if enabled).
+            </description>
+        </member>
+        <member name="physics_heading" type="float" setter="" getter="get_physics_heading" default="0.0">
+            <description>
+                Vehicle heading angle in radians.
+            </description>
+        </member>
+        <member name="physics_pitch" type="float" setter="" getter="get_physics_pitch" default="0.0">
+            <description>
+                Vehicle pitch angle in radians (nose-down is positive).
+            </description>
+        </member>
+        <member name="physics_roll" type="float" setter="" getter="get_physics_roll" default="0.0">
+            <description>
+                Vehicle roll angle in radians (right roll is positive).
+            </description>
+        </member>
+        <member name="physics_cgHeight" type="float" setter="" getter="get_physics_cgHeight" default="0.0">
+            <description>
+                Height of the vehicle center of gravity in meters.
+            </description>
+        </member>
+        <member name="physics_carDamage" type="Vector4" setter="" getter="get_physics_carDamage" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Damage level for each corner of the chassis from 0.0 to 1.0 (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_numberOfTyresOut" type="int" setter="" getter="get_physics_numberOfTyresOut" default="0">
+            <description>
+                Count of tires currently outside track boundaries.
+            </description>
+        </member>
+        <member name="physics_pitLimiterOn" type="int" setter="" getter="get_physics_pitLimiterOn" default="0">
+            <description>
+                Whether pit speed limiter is active (1 = active, 0 = inactive).
+            </description>
+        </member>
+        <member name="physics_abs" type="float" setter="" getter="get_physics_abs" default="0.0">
+            <description>
+                Slip ratio limit for the ABS (if enabled).
+            </description>
+        </member>
+        <member name="physics_kersCharge" type="float" setter="" getter="get_physics_kersCharge" default="0.0">
+            <description>
+                KERS/ERS battery charge level from 0.0 to 1.0.
+            </description>
+        </member>
+        <member name="physics_kersInput" type="float" setter="" getter="get_physics_kersInput" default="0.0">
+            <description>
+                KERS/ERS deployment input level from 0.0 to 1.0.
+            </description>
+        </member>
+        <member name="physics_autoShifterOn" type="int" setter="" getter="get_physics_autoShifterOn" default="0">
+            <description>
+                Whether automatic gear shifting is engaged (1 = active, 0 = inactive).
+            </description>
+        </member>
+        <member name="physics_rideHeight" type="Vector2" setter="" getter="get_physics_rideHeight" default="Vector2(0, 0)">
+            <description>
+                Ride height from ground for front (x) and rear (y) axles in meters.
+            </description>
+        </member>
+        <member name="physics_turboBoost" type="float" setter="" getter="get_physics_turboBoost" default="0.0">
+            <description>
+                Turbocharger boost pressure in bars.
+            </description>
+        </member>
+        <member name="physics_ballast" type="float" setter="" getter="get_physics_ballast" default="0.0">
+            <description>
+                Current ballast weight in kilograms.
+            </description>
+        </member>
+        <member name="physics_airDensity" type="float" setter="" getter="get_physics_airDensity" default="0.0">
+            <description>
+                Air density affecting aerodynamic forces.
+            </description>
+        </member>
+
+        <member name="physics_airTemp" type="float" setter="" getter="get_physics_airTemp" default="0.0">
+            <description>
+                Ambient temperature in Celsius.
+            </description>
+        </member>
+        <member name="physics_roadTemp" type="float" setter="" getter="get_physics_roadTemp" default="0.0">
+            <description>
+                Track surface temperature in Celsius.
+            </description>
+        </member>
+        <member name="physics_localAngularVel" type="Vector3" setter="" getter="get_physics_localAngularVel" default="Vector3(0, 0, 0)">
+            <description>
+                Vehicle angular velocity in local coordinates (rad/s).
+            </description>
+        </member>
+        <member name="physics_finalFF" type="float" setter="" getter="get_physics_finalFF" default="0.0">
+            <description>
+                Final force feedback value for steering wheel.
+            </description>
+        </member>
+        <member name="physics_performanceMeter" type="float" setter="" getter="get_physics_performanceMeter" default="0.0">
+            <description>
+                Performance meter compared to the best lap.
+            </description>
+        </member>
+        <member name="physics_engineBrake" type="int" setter="" getter="get_physics_engineBrake" default="0">
+            <description>
+                Engine braking level.
+            </description>
+        </member>
+        <member name="physics_ersRecoveryLevel" type="int" setter="" getter="get_physics_ersRecoveryLevel" default="0">
+            <description>
+                ERS recovery level.
+            </description>
+        </member>
+        <member name="physics_ersPowerLevel" type="int" setter="" getter="get_physics_ersPowerLevel" default="0">
+            <description>
+                ERS power deployment level.
+            </description>
+        </member>
+        <member name="physics_ersHeatCharging" type="int" setter="" getter="get_physics_ersHeatCharging" default="0">
+            <description>
+                Whether ERS is charging from heat (1 = battery, 0 = motor).
+            </description>
+        </member>
+        <member name="physics_ersIsCharging" type="int" setter="" getter="get_physics_ersIsCharging" default="0">
+            <description>
+                Whether ERS is currently charging (1 = yes, 0 = no).
+            </description>
+        </member>
+        <member name="physics_kersCurrentKJ" type="float" setter="" getter="get_physics_kersCurrentKJ" default="0.0">
+            <description>
+                Current KERS/ERS energy stored in kilojoules.
+            </description>
+        </member>
+        <member name="physics_drsAvailable" type="int" setter="" getter="get_physics_drsAvailable" default="0">
+            <description>
+                Whether DRS is available to use (1 = yes, 0 = no).
+            </description>
+        </member>
+        <member name="physics_drsEnabled" type="int" setter="" getter="get_physics_drsEnabled" default="0">
+            <description>
+                Whether DRS is currently active (1 = yes, 0 = no).
+            </description>
+        </member>
+        <member name="physics_brakeTemp" type="Vector4" setter="" getter="get_physics_brakeTemp" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Brake temperature for each wheel in Celsius (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_clutch" type="float" setter="" getter="get_physics_clutch" default="0.0">
+            <description>
+                Clutch input normalized to 0.0-1.0 range.
+            </description>
+        </member>
+        <member name="physics_tyreTempI" type="Vector4" setter="" getter="get_physics_tyreTempI" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Inner tire temperature for each wheel in Celsius (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_tyreTempM" type="Vector4" setter="" getter="get_physics_tyreTempM" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Middle tire temperature for each wheel in Celsius (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_tyreTempO" type="Vector4" setter="" getter="get_physics_tyreTempO" default="Vector4(0, 0, 0, 0)">
+            <description>
+                Outer tire temperature for each wheel in Celsius (FL, FR, RL, RR).
+            </description>
+        </member>
+        <member name="physics_isAIControlled" type="int" setter="" getter="get_physics_isAIControlled" default="0">
+            <description>
+                Whether the car is currently under AI control (1 = yes, 0 = no).
+            </description>
+        </member>
+        <member name="physics_tyreContactPoint" type="PackedVector3Array" setter="" getter="get_physics_tyreContactPoint" default="[]">
+            <description>
+                Contact points for each tire in 3D world space.
+            </description>
+        </member>
+        <member name="physics_tyreContactNormal" type="PackedVector3Array" setter="" getter="get_physics_tyreContactNormal" default="[]">
+            <description>
+                Contact normal vectors for each tire.
+            </description>
+        </member>
+        <member name="physics_tyreContactHeading" type="PackedVector3Array" setter="" getter="get_physics_tyreContactHeading" default="[]">
+            <description>
+                Contact heading vectors for each tire.
+            </description>
+        </member>
+        <member name="physics_brakeBias" type="float" setter="" getter="get_physics_brakeBias" default="0.0">
+            <description>
+                Brake balance bias from 0.0 (front) to 1.0 (rear).
+            </description>
+        </member>
+        <member name="physics_localVelocity" type="Vector3" setter="" getter="get_physics_localVelocity" default="Vector3(0, 0, 0)">
+            <description>
+                Velocity vector in local vehicle coordinates (m/s).
+            </description>
+        </member>
+
+
+        <member name="graphic_packetId" type="int" setter="" getter="get_graphic_packetId" default="0">
+            <description>
+                Unique identifier for this graphics data packet.
+            </description>
+        </member>
+        <member name="graphic_session" type="int" setter="" getter="get_graphic_session" default="-1">
+            <description>
+                Current session type as [enum ACTelemetry.ACSessionType] value.
+            </description>
+        </member>
+        <member name="graphic_currentTime" type="String" setter="" getter="get_graphic_currentTime" default="&quot;&quot;">
+            <description>
+                Formatted current lap time (MM:SS.mmm).
+            </description>
+        </member>
+        <member name="graphic_lastTime" type="String" setter="" getter="get_graphic_lastTime" default="&quot;&quot;">
+            <description>
+                Formatted previous lap time (MM:SS.mmm).
+            </description>
+        </member>
+        <member name="graphic_bestTime" type="String" setter="" getter="get_graphic_bestTime" default="&quot;&quot;">
+            <description>
+                Formatted best lap time (MM:SS.mmm).
+            </description>
+        </member>
+        <member name="graphic_split" type="String" setter="" getter="get_graphic_split" default="&quot;&quot;">
+            <description>
+                Formatted sector split time (MM:SS.mmm).
+            </description>
+        </member>
+        <member name="graphic_completedLaps" type="int" setter="" getter="get_graphic_completedLaps" default="0">
+            <description>
+                Number of completed laps by the player.
+            </description>
+        </member>
+        <member name="graphic_position" type="int" setter="" getter="get_graphic_position" default="0">
+            <description>
+                Current player position (standings).
+            </description>
+        </member>
+        <member name="graphic_iCurrentTime" type="int" setter="" getter="get_graphic_iCurrentTime" default="0">
+            <description>
+                Current lap time in milliseconds.
+            </description>
+        </member>
+        <member name="graphic_iLastTime" type="int" setter="" getter="get_graphic_iLastTime" default="0">
+            <description>
+                Previous lap time in milliseconds.
+            </description>
+        </member>
+        <member name="graphic_iBestTime" type="int" setter="" getter="get_graphic_iBestTime" default="0">
+            <description>
+                Best lap time in milliseconds.
+            </description>
+        </member>
+        <member name="graphic_sessionTimeLeft" type="float" setter="" getter="get_graphic_sessionTimeLeft" default="0.0">
+            <description>
+                Remaining session time in seconds.
+            </description>
+        </member>
+        <member name="graphic_distanceTraveled" type="float" setter="" getter="get_graphic_distanceTraveled" default="0.0">
+            <description>
+                Total distance traveled since session start in meters.
+            </description>
+        </member>
+        <member name="graphic_isInPit" type="int" setter="" getter="get_graphic_isInPit" default="0">
+            <description>
+                Whether currently in the pit box (1 = yes, 0 = no).
+            </description>
+        </member>
+        <member name="graphic_currentSectorIndex" type="int" setter="" getter="get_graphic_currentSectorIndex" default="0">
+            <description>
+                Current sector index.
+            </description>
+        </member>
+        <member name="graphic_lastSectorTime" type="int" setter="" getter="get_graphic_lastSectorTime" default="0">
+            <description>
+                Last completed sector time in milliseconds.
+            </description>
+        </member>
+        <member name="graphic_numberOfLaps" type="int" setter="" getter="get_graphic_numberOfLaps" default="0">
+            <description>
+                Total number of laps scheduled for this session.
+            </description>
+        </member>
+        <member name="graphic_tyreCompound" type="String" setter="" getter="get_graphic_tyreCompound" default="&quot;&quot;">
+            <description>
+                Name of the currently used tire compound.
+            </description>
+        </member>
+        <member name="graphic_normalizedCarPosition" type="float" setter="" getter="get_graphic_normalizedCarPosition" default="0.0">
+            <description>
+                Normalized position on track from 0.0 (start) to 1.0 (end).
+            </description>
+        </member>
+        <member name="graphic_carCoordinates" type="Vector3" setter="" getter="get_graphic_carCoordinates" default="Vector3(0, 0, 0)">
+            <description>
+                3D world coordinates of the vehicle.
+            </description>
+        </member>
+        <member name="graphic_penaltyTime" type="float" setter="" getter="get_graphic_penaltyTime" default="0.0">
+            <description>
+                Remaining penalty time in seconds.
+            </description>
+        </member>
+        <member name="graphic_flag" type="int" setter="" getter="get_graphic_flag" default="0">
+            <description>
+                Current flag state as [enum ACTelemetry.ACFlagType] value.
+            </description>
+        </member>
+        <member name="graphic_isInPitLane" type="int" setter="" getter="get_graphic_isInPitLane" default="0">
+            <description>
+                Whether currently in the pit lane (1 = yes, 0 = no).
+            </description>
+        </member>
+        <member name="graphic_surfaceGrip" type="float" setter="" getter="get_graphic_surfaceGrip" default="0.0">
+            <description>
+                Current track surface grip coefficient.
+            </description>
+        </member>
+
+        <member name="graphic_mandatoryPitDone" type="int" setter="" getter="get_graphic_mandatoryPitDone" default="0">
+            <description>
+                Whether the mandatory pit stop has been completed (1 = yes, 0 = no).
+            </description>
+        </member>
+        <member name="graphic_windSpeed" type="float" setter="" getter="get_graphic_windSpeed" default="0.0">
+            <description>
+                Wind speed in km/h affecting aerodynamics.
+            </description>
+        </member>
+        <member name="graphic_windDirection" type="float" setter="" getter="get_graphic_windDirection" default="0.0">
+            <description>
+                Wind direction in degrees.
+            </description>
+        </member>
+    </members>
+</class>
