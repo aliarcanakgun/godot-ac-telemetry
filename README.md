@@ -27,6 +27,7 @@ scons platform=windows target=template_release
 ```
 
 ### Known issues:
+* Documentation is buggy. I'm trying to find a way to fix it.
 * **This extension is not production-ready yet,** but the core system is implemented.
 
 ### Public functions & properties:
