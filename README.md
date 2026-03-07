@@ -36,14 +36,21 @@ scons platform=windows target=template_release
 * `disconnect_from_ac()`: Unmaps and closes any shared-memory handles and marks the node disconnected.
 * `start_logging()`: Clears previous session data and begins collecting telemetry snapshots into in-memory per-lap vectors.
 * `finish_logging()`: Stops logging and writes all collected lap snapshots into last_session_data.bin (binary). Returns the output filename or error string.
-* `get_speed()`: Convenience accessor returning the latest speedKmh from the physics page (or 0.0 if not available).
-* `is_connected_to_ac()`: Property/getter — returns whether shared-memory mappings are currently active.
-* `is_currently_logging()`: Property/getter — returns whether the node is collecting telemetry snapshots.
-* `sample_interval`: Property for the polling interval (default 0.02 seconds). Exposed as the sample_interval property in the Godot inspector.
+* `is_connected_to_ac()`: Returns whether shared-memory mappings are currently active.
+* `is_currently_logging()`: Returns whether the node is collecting telemetry snapshots.
+* `get_live_static_data()`: Returns the static data of the current live game session.
+* `load_session_data(file_path)`:
+* `close_loaded_session()`:
+* `get_loaded_session_lap_count()`:
+* `get_loaded_session_sample_interval()`:
+* `get_loaded_session_lap_data(lap_index)`:
+* `get_loaded_session_static_data()`: 
+* `sample_interval`: Property for the polling interval (default 0.02 seconds)to update telemetry.
+* `save_file_signature`: Property for the signature string (default value is "ACTL") written at the beginning of the binary save file to identify it.
 * Signal `connection_lost`: Emitted when a previously valid mapping becomes invalid (used to notify the game that telemetry source was disconnected).
 
 ### Data & file notes:
 
-* Telemetry structures:: `SPagePhysics`, `SPageGraphic` and `SPageStatic` match the memory layout expected from Assetto Corsa (packed with 4-byte alignment).
+* Telemetry structures: `SPagePhysics`, `SPageGraphic` and `SPageStatic` match the memory layout expected from Assetto Corsa (packed with 4-byte alignment).
 * Output file: Contains serialized `TelemetrySnapshot` sequences organized by laps. Each snapshot captures `SPagePhysics` and `SPageGraphic` data at every `sample_interval`. Snapshots are buffered into a lap-specific vector, which are then stored in a session-wide "main" vector. The entire session is flushed to the binary file only when logging is finished. An example is in the demo project.
 * Platform: Current implementation uses Win32 APIs (OpenFileMapping, MapViewOfFile, FormatMessage, etc.) and is Windows-only. For cross-platform usage, the IPC layer must be refactored.
