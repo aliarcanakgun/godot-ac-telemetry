@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Godot AC Extension Demo Project"
-config/tags=PackedStringArray("addon", "gd_extension", "prototype")
+config/tags=PackedStringArray("addon", "demo", "gd_extension", "personal_project")
 run/main_scene="uid://dofp3hyywitc0"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
