@@ -36,6 +36,7 @@ namespace godot {
         String save_file_signature = "ACTL"; 
 
         int last_lap_count = 0;
+        int last_physics_packet_id = -1;
         bool is_connected = false;
         bool is_logging = false;
 

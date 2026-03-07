@@ -23,6 +23,7 @@ ACTelemetry::ACTelemetry() {
     dataStatic = nullptr;
 
     is_connected = false;
+    last_physics_packet_id = -1;
     is_logging = false;
 }
 
@@ -209,6 +210,7 @@ void ACTelemetry::disconnect_from_ac() {
 void ACTelemetry::start_logging() {
     sessions_data.clear();
     last_lap_count = 0;
+    last_physics_packet_id = -1;
     is_logging = true;
 }
 
@@ -235,6 +237,10 @@ void ACTelemetry::_process(double delta) {
     if (is_logging) {
         // check if game is not live
         if (dataGraphic->status != AC_LIVE) { return; }
+
+        // prevent duplicate entries if the game stutters
+        if (dataPhysics->packetId == last_physics_packet_id) { return; }
+        last_physics_packet_id = dataPhysics->packetId;
 
         // check for new lap in graphic page
         if (dataGraphic->completedLaps > last_lap_count || sessions_data.empty()) {
