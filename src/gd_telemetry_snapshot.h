@@ -117,7 +117,7 @@ namespace godot {
 
         // getters
 
-        int get_snapshot_timestamp() const;
+        double get_snapshot_timestamp() const;
         
         int get_physics_packetId() const;
         float get_physics_gas() const;

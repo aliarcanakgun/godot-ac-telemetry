@@ -316,7 +316,7 @@ void GDTelemetrySnapshot::fill_from_snapshot(const TelemetrySnapshot &s) {
 }
 
 
-int GDTelemetrySnapshot::get_snapshot_timestamp() const { return snapshot_timestamp; }
+double GDTelemetrySnapshot::get_snapshot_timestamp() const { return snapshot_timestamp; }
 
 int GDTelemetrySnapshot::get_physics_packetId() const { return physics_packetId; }
 float GDTelemetrySnapshot::get_physics_gas() const { return physics_gas; }
