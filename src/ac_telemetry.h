@@ -37,6 +37,7 @@ namespace godot {
 
         int last_lap_count = 0;
         int last_physics_packet_id = -1;
+        int last_i_current_time = 0;
         bool is_connected = false;
         bool is_logging = false;
 

@@ -25,6 +25,7 @@ ACTelemetry::ACTelemetry() {
     is_connected = false;
     last_physics_packet_id = -1;
     is_logging = false;
+    last_i_current_time = 0;
 }
 
 ACTelemetry::~ACTelemetry() {
@@ -211,6 +212,7 @@ void ACTelemetry::start_logging() {
     sessions_data.clear();
     last_lap_count = 0;
     last_physics_packet_id = -1;
+    last_i_current_time = 0;
     is_logging = true;
 }
 
@@ -242,6 +244,16 @@ void ACTelemetry::_process(double delta) {
         if (dataPhysics->packetId == last_physics_packet_id) { return; }
         last_physics_packet_id = dataPhysics->packetId;
 
+        // hotlap specific: detect crossing the start line for the first time (out-lap to Lap 1)
+        if (dataGraphic->session == AC_HOTLAP && last_lap_count == 0 && !sessions_data.empty()) {
+            // if current time is less than last frame, the car just crossed the start line
+            if (dataGraphic->iCurrentTime < last_i_current_time) {
+                sessions_data.clear();
+                session_time = 0.0;
+            }
+        }
+        last_i_current_time = dataGraphic->iCurrentTime;
+
         // check for new lap in graphic page
         if (dataGraphic->completedLaps > last_lap_count || sessions_data.empty()) {
             sessions_data.push_back(std::vector<TelemetrySnapshot>());
@@ -266,6 +278,13 @@ String ACTelemetry::finish_logging(String output_file_path) {
     if (output_file_path.is_empty()) return String("Output file path is empty.");
 
     is_logging = false;
+
+    // remove the last incomplete lap before saving
+    if (!sessions_data.empty()) {
+        sessions_data.pop_back();
+    }
+
+    if (sessions_data.empty()) return String("No complete laps were recorded.");
 
     // convert godot path (res:// or user://) to filesystem path if needed
     String os_path = output_file_path;
