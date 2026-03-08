@@ -24,7 +24,7 @@ namespace godot {
 
         // logging logic
         double sample_interval = 0.02; // 50 hz
-        double session_time = 0.0;
+        double lap_timestamp = 0.0;
         double accum = 0.0;
         
         std::vector<std::vector<TelemetrySnapshot>> sessions_data;

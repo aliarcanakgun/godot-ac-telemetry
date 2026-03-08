@@ -229,7 +229,7 @@ void ACTelemetry::_process(double delta) {
     // check for refresh time
     accum += delta;
     if (accum >= sample_interval) {
-        session_time += sample_interval;
+        lap_timestamp += sample_interval;
         accum -= sample_interval;
     } else {
         return;
@@ -249,7 +249,7 @@ void ACTelemetry::_process(double delta) {
             // if current time is less than last frame, the car just crossed the start line
             if (dataGraphic->iCurrentTime < last_i_current_time) {
                 sessions_data.clear();
-                session_time = 0.0;
+                lap_timestamp = 0.0;
             }
         }
         last_i_current_time = dataGraphic->iCurrentTime;
@@ -258,12 +258,12 @@ void ACTelemetry::_process(double delta) {
         if (dataGraphic->completedLaps > last_lap_count || sessions_data.empty()) {
             sessions_data.push_back(std::vector<TelemetrySnapshot>());
             last_lap_count = dataGraphic->completedLaps;
-            session_time = 0.0;
+            lap_timestamp = 0.0;
         }
 
         // create snapshot
         TelemetrySnapshot snapshot;
-        snapshot.timestamp = session_time;
+        snapshot.timestamp = lap_timestamp;
         snapshot.physics = *dataPhysics;
         snapshot.graphic = *dataGraphic;
 
