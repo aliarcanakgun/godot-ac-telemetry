@@ -26,6 +26,7 @@ namespace godot {
         double sample_interval = 0.02; // 50 hz
         double lap_timestamp = 0.0;
         double accum = 0.0;
+        String session_output_file_path = "";
         
         std::vector<std::vector<TelemetrySnapshot>> sessions_data;
         std::vector<std::vector<TelemetrySnapshot>> loaded_session_data;
@@ -63,8 +64,12 @@ namespace godot {
         String connect_to_ac();
         void disconnect_from_ac();
         
-        void start_logging();
-        String finish_logging(String output_file_path);
+        // output_file_path (required): file where telemetry will be saved if AC is turned off without finish_logging()
+        // it must be a valid file path
+        String start_logging(String output_file_path);
+        // output_file_path (optional): file where telemetry will be saved
+        // if it's not a valid file path, the file path where the start_logging() function is called will be used
+        String finish_logging(String output_file_path = "");
 
         Dictionary get_live_static_data();
 

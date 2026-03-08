@@ -65,8 +65,8 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("connect_to_ac"), &ACTelemetry::connect_to_ac);
     ClassDB::bind_method(D_METHOD("disconnect_from_ac"), &ACTelemetry::disconnect_from_ac);
 
-    ClassDB::bind_method(D_METHOD("start_logging"), &ACTelemetry::start_logging);
-    ClassDB::bind_method(D_METHOD("finish_logging", "output_file_path"), &ACTelemetry::finish_logging);
+    ClassDB::bind_method(D_METHOD("start_logging", "output_file_path"), &ACTelemetry::start_logging);
+    ClassDB::bind_method(D_METHOD("finish_logging", "output_file_path"), &ACTelemetry::finish_logging, DEFVAL(""));
 
     ClassDB::bind_method(D_METHOD("get_live_static_data"), &ACTelemetry::get_live_static_data);
 
@@ -208,19 +208,12 @@ void ACTelemetry::disconnect_from_ac() {
     if (hMapStatic) { CloseHandle(hMapStatic); hMapStatic = nullptr; }
 }
 
-void ACTelemetry::start_logging() {
-    sessions_data.clear();
-    last_lap_count = 0;
-    last_physics_packet_id = -1;
-    last_i_current_time = 0;
-    is_logging = true;
-}
-
 void ACTelemetry::_process(double delta) {
     // check if pointers are still valid
     if (!dataPhysics || !dataGraphic) {
         if (is_connected) {
             is_connected = false;
+            finish_logging(session_output_file_path);
             emit_signal("connection_lost");
         }
         return;
@@ -272,10 +265,21 @@ void ACTelemetry::_process(double delta) {
     }
 }
 
+String ACTelemetry::start_logging(String output_file_path) {
+    if (output_file_path.is_empty()) return String("Output file path is empty.");
+    session_output_file_path = output_file_path;
+
+    sessions_data.clear();
+    last_lap_count = 0;
+    lap_timestamp = 0;
+    last_physics_packet_id = -1;
+    last_i_current_time = 0;
+    is_logging = true;
+}
+
 String ACTelemetry::finish_logging(String output_file_path) {
     if (!is_connected) return String("AC is not connected.");
     if (!is_logging) return String("Telemetry is not working.");
-    if (output_file_path.is_empty()) return String("Output file path is empty.");
 
     is_logging = false;
 
@@ -286,8 +290,12 @@ String ACTelemetry::finish_logging(String output_file_path) {
 
     if (sessions_data.empty()) return String("No complete laps were recorded.");
 
+    // get output file path
+    String output = output_file_path;
+    if (output.is_empty()) output = session_output_file_path;
+
     // convert godot path (res:// or user://) to filesystem path if needed
-    String os_path = output_file_path;
+    String os_path = output;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }
