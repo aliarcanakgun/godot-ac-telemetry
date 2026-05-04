@@ -529,7 +529,7 @@ Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {
 }
 
 void ACTelemetry::logging_loop() {
-    auto interval = std::chrono::duration<double>(sample_interval);
+    auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(sample_interval));
     auto next_tick = std::chrono::steady_clock::now();
 
     while (is_logging) {
