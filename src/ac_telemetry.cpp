@@ -29,6 +29,11 @@ ACTelemetry::ACTelemetry() {
 }
 
 ACTelemetry::~ACTelemetry() {
+    is_logging = false;
+    if (logging_thread.joinable()) {
+        logging_thread.join();
+    }
+
     // release the datas from ram immediately
     sessions_data.clear();
     sessions_data.shrink_to_fit();
@@ -199,6 +204,8 @@ String ACTelemetry::connect_to_ac() {
 }
 
 void ACTelemetry::disconnect_from_ac() {
+    finish_logging(); // finish logging (if it's logging)
+
     is_connected = false;
     if (dataPhysics) { UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; }
     if (dataGraphic) { UnmapViewOfFile(dataGraphic); dataGraphic = nullptr; }
@@ -218,63 +225,22 @@ void ACTelemetry::_process(double delta) {
         }
         return;
     }
-
-    // check for refresh time
-    accum += delta;
-    if (accum >= sample_interval) {
-        lap_timestamp += sample_interval;
-        accum -= sample_interval;
-    } else {
-        return;
-    }
-    
-    // telemetry stuff
-    if (is_logging) {
-        // check if game is not live
-        if (dataGraphic->status != AC_LIVE) { return; }
-
-        // prevent duplicate entries if the game stutters
-        if (dataPhysics->packetId == last_physics_packet_id) { return; }
-        last_physics_packet_id = dataPhysics->packetId;
-
-        // hotlap specific: detect crossing the start line for the first time (out-lap to Lap 1)
-        if (dataGraphic->session == AC_HOTLAP && last_lap_count == 0 && !sessions_data.empty()) {
-            // if current time is less than last frame, the car just crossed the start line
-            if (dataGraphic->iCurrentTime < last_i_current_time) {
-                sessions_data.clear();
-                lap_timestamp = 0.0;
-            }
-        }
-        last_i_current_time = dataGraphic->iCurrentTime;
-
-        // check for new lap in graphic page
-        if (dataGraphic->completedLaps > last_lap_count || sessions_data.empty()) {
-            sessions_data.push_back(std::vector<TelemetrySnapshot>());
-            last_lap_count = dataGraphic->completedLaps;
-            lap_timestamp = 0.0;
-        }
-
-        // create snapshot
-        TelemetrySnapshot snapshot;
-        snapshot.timestamp = lap_timestamp;
-        snapshot.physics = *dataPhysics;
-        snapshot.graphic = *dataGraphic;
-
-        // store data from physics page into current lap
-        sessions_data.back().push_back(snapshot);
-    }
 }
 
 String ACTelemetry::start_logging(String output_file_path) {
     if (output_file_path.is_empty()) return String("Output file path is empty.");
+    if (is_logging) return String("Already logging.");
     session_output_file_path = output_file_path;
 
     sessions_data.clear();
     last_lap_count = 0;
-    lap_timestamp = 0;
     last_physics_packet_id = -1;
     last_i_current_time = 0;
     is_logging = true;
+
+    logging_thread = std::thread(&ACTelemetry::logging_loop, this);
+
+    return String("");
 }
 
 String ACTelemetry::finish_logging(String output_file_path) {
@@ -282,6 +248,9 @@ String ACTelemetry::finish_logging(String output_file_path) {
     if (!is_logging) return String("Telemetry is not working.");
 
     is_logging = false;
+    if (logging_thread.joinable()) {
+        logging_thread.join();
+    }
 
     // remove the last incomplete lap before saving
     if (!sessions_data.empty()) {
@@ -557,4 +526,51 @@ Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {
     d["isOnline"] = s.isOnline;
 
     return d;
+}
+
+void ACTelemetry::logging_loop() {
+    auto interval = std::chrono::duration<double>(sample_interval);
+    auto next_tick = std::chrono::steady_clock::now();
+
+    while (is_logging) {
+        next_tick += interval;
+
+        if (dataGraphic && dataPhysics) {
+            if (dataGraphic->status != AC_LIVE) {
+                std::this_thread::sleep_until(next_tick);
+                continue;
+            }
+
+            if (dataPhysics->packetId == last_physics_packet_id) {
+                std::this_thread::sleep_until(next_tick);
+                continue;
+            }
+            last_physics_packet_id = dataPhysics->packetId;
+
+            {
+                std::lock_guard<std::mutex> lock(data_mutex);
+
+                if (dataGraphic->session == AC_HOTLAP && last_lap_count == 0 && !sessions_data.empty()) {
+                    if (dataGraphic->iCurrentTime < last_i_current_time) {
+                        sessions_data.clear();
+                    }
+                }
+                last_i_current_time = dataGraphic->iCurrentTime;
+
+                if (dataGraphic->completedLaps > last_lap_count || sessions_data.empty()) {
+                    sessions_data.push_back(std::vector<TelemetrySnapshot>());
+                    last_lap_count = dataGraphic->completedLaps;
+                }
+
+                TelemetrySnapshot snapshot;
+                snapshot.timestamp = dataGraphic->iCurrentTime / 1000.0;
+                snapshot.physics = *dataPhysics;
+                snapshot.graphic = *dataGraphic;
+
+                sessions_data.back().push_back(snapshot);
+            }
+        }
+
+        std::this_thread::sleep_until(next_tick);
+    }
 }

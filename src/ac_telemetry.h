@@ -6,6 +6,10 @@
 #include "gd_telemetry_snapshot.h"
 #include <windows.h>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <chrono>
+#include <mutex>
 
 namespace godot {
     class ACTelemetry : public Node {
@@ -24,8 +28,6 @@ namespace godot {
 
         // logging logic
         double sample_interval = 0.02; // 50 hz
-        double lap_timestamp = 0.0;
-        double accum = 0.0;
         String session_output_file_path = "";
         
         std::vector<std::vector<TelemetrySnapshot>> sessions_data;
@@ -40,7 +42,12 @@ namespace godot {
         int last_physics_packet_id = -1;
         int last_i_current_time = 0;
         bool is_connected = false;
-        bool is_logging = false;
+        std::atomic<bool> is_logging{false};
+
+        std::thread logging_thread;
+        std::mutex data_mutex;
+
+        void logging_loop();
 
     protected:
         static void _bind_methods();
