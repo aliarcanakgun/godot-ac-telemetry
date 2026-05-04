@@ -480,12 +480,11 @@ Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {
 
     d["numberOfSessions"] = s.numberOfSessions;
     d["numCars"] = s.numCars;
-    d["carModel"] = wchar_to_gdstring(s.carModel, 15);
-    d["track"] = wchar_to_gdstring(s.track, 15);
-    d["playerName"] = wchar_to_gdstring(s.playerName, 15);
-    d["playerSurname"] = wchar_to_gdstring(s.playerSurname, 15);
-    d["playerNick"] = wchar_to_gdstring(s.playerNick, 15);
-    d["playerNick"] = wchar_to_gdstring(s.playerNick, 15);
+    d["carModel"] = wchar_to_gdstring(s.carModel, 33);
+    d["track"] = wchar_to_gdstring(s.track, 33);
+    d["playerName"] = wchar_to_gdstring(s.playerName, 33);
+    d["playerSurname"] = wchar_to_gdstring(s.playerSurname, 33);
+    d["playerNick"] = wchar_to_gdstring(s.playerNick, 33);
     d["sectorCount"] = s.sectorCount;
     
     d["maxTorque"] = s.maxTorque;

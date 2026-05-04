@@ -27,18 +27,5 @@ String win_error_string(DWORD err) {
 
 String wchar_to_gdstring(const wchar_t* wstr, size_t len) {
     if (!wstr || len == 0) return String("");
-    String out = String((const char16_t*)wstr);
-    return out.strip_edges();
+    return String::utf16((const char16_t*)wstr, (int64_t)wcsnlen(wstr, len)).strip_edges();
 }
-
-// String wchar_to_gdstring(const wchar_t* wstr, size_t len) {
-//     if (!wstr || len == 0) return String("");
-//     int needed = WideCharToMultiByte(CP_UTF8, 0, wstr, (int)len, NULL, 0, NULL, NULL);
-//     if (needed <= 0) return String("");
-//     std::string out;
-//     out.resize(needed);
-//     WideCharToMultiByte(CP_UTF8, 0, wstr, (int)len, &out[0], needed, NULL, NULL);
-//     // trim trailing nulls if any
-//     size_t real_len = strnlen(out.c_str(), out.size());
-//     return String::utf8(out.c_str(), (int)real_len);
-// }
