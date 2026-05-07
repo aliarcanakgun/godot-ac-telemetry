@@ -252,18 +252,13 @@ String ACTelemetry::finish_logging(String output_file_path) {
         logging_thread.join();
     }
 
-    // remove the last incomplete lap before saving
-    if (!sessions_data.empty()) {
-        sessions_data.pop_back();
-    }
+    if (sessions_data.empty()) return String("No telemetry data was recorded.");
 
-    if (sessions_data.empty()) return String("No complete laps were recorded.");
-
-    // get output file path
+    // get output path
     String output = output_file_path;
     if (output.is_empty()) output = session_output_file_path;
 
-    // convert godot path (res:// or user://) to filesystem path if needed
+    // convert godot path to fs path if needed
     String os_path = output;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
@@ -549,16 +544,18 @@ void ACTelemetry::logging_loop() {
             {
                 std::lock_guard<std::mutex> lock(data_mutex);
 
-                if (dataGraphic->session == AC_HOTLAP && last_lap_count == 0 && !sessions_data.empty()) {
-                    if (dataGraphic->iCurrentTime < last_i_current_time) {
-                        sessions_data.clear();
-                    }
+                bool lap_changed = false;
+                if (dataGraphic->iCurrentTime < last_i_current_time) {
+                    lap_changed = true;
                 }
                 last_i_current_time = dataGraphic->iCurrentTime;
-
-                if (dataGraphic->completedLaps > last_lap_count || sessions_data.empty()) {
-                    sessions_data.push_back(std::vector<TelemetrySnapshot>());
+                
+                if (dataGraphic->completedLaps > last_lap_count) {
                     last_lap_count = dataGraphic->completedLaps;
+                }
+
+                if (lap_changed || sessions_data.empty()) {
+                    sessions_data.push_back(std::vector<TelemetrySnapshot>());
                 }
 
                 TelemetrySnapshot snapshot;
