@@ -1,12 +1,13 @@
 extends Node
 
-#var loaded_data: Array[GDTelemetrySnapshot]
-#var last_i := 0
-#var accum := 0.0
-#
+var loaded_data: Array[GDTelemetrySnapshot]
+var last_i := 0
+var accum := 0.0
+
 #func _ready() -> void:
 	#if !$ACTelemetry.load_session_data("res://lap.bin").is_empty(): return
-	#loaded_data = $ACTelemetry.get_loaded_session_lap_data(2)
+	#loaded_data = $ACTelemetry.get_loaded_session_lap_data(8)
+	#print($ACTelemetry.get_loaded_session_lap_stats(8))
 	##breakpoint
 	##print($ACTelemetry.get_loaded_session_static_data())
 #

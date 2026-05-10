@@ -5,6 +5,8 @@
 #include "telemetry_enums.h"
 #include "gd_telemetry_snapshot.h"
 #include <windows.h>
+#include <mmsystem.h>
+#pragma comment(lib, "winmm.lib")
 #include <vector>
 #include <thread>
 #include <atomic>
@@ -82,6 +84,7 @@ namespace godot {
 
         String load_session_data(String file_path);
         TypedArray<GDTelemetrySnapshot> get_loaded_session_lap_data(int lap_index);
+        Dictionary get_loaded_session_lap_stats(int lap_index);
         Dictionary get_loaded_session_static_data();
         int get_loaded_session_lap_count();
         double get_loaded_session_sample_interval();

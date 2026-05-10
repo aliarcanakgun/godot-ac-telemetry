@@ -13,7 +13,7 @@ using namespace godot;
 ACTelemetry::ACTelemetry() {
     set_process(true);
 
-    // initialize all pointers
+    // initialize pointers
     hMapPhysics = NULL;
     hMapGraphic = NULL;
     hMapStatic = NULL;
@@ -34,7 +34,7 @@ ACTelemetry::~ACTelemetry() {
         logging_thread.join();
     }
 
-    // release the datas from ram immediately
+    // release the datas
     sessions_data.clear();
     sessions_data.shrink_to_fit();
 
@@ -80,11 +80,12 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_count"), &ACTelemetry::get_loaded_session_lap_count);
     ClassDB::bind_method(D_METHOD("get_loaded_session_sample_interval"), &ACTelemetry::get_loaded_session_sample_interval);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_data", "lap_index"), &ACTelemetry::get_loaded_session_lap_data);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_lap_stats", "lap_index"), &ACTelemetry::get_loaded_session_lap_stats);
     ClassDB::bind_method(D_METHOD("get_loaded_session_static_data"), &ACTelemetry::get_loaded_session_static_data);
 
     ClassDB::add_signal("ACTelemetry", MethodInfo("connection_lost"));
 
-    // bind getter/setter methods first
+    // getters/setters
     ClassDB::bind_method(D_METHOD("is_connected_to_ac"), &ACTelemetry::is_connected_to_ac);   
     ClassDB::bind_method(D_METHOD("is_currently_logging"), &ACTelemetry::is_currently_logging);
 
@@ -94,10 +95,8 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_save_file_signature"), &ACTelemetry::get_save_file_signature);
     ClassDB::bind_method(D_METHOD("set_save_file_signature"), &ACTelemetry::set_save_file_signature);
 
-    // register properties to godot inspector
-    // TODO: ADD DOCUMENTATION: "The interval to update telemetry. In seconds. Can't be changed while logging."
+    // properties
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval"), "set_sample_interval", "get_sample_interval");
-    // TODO: ADD DOCUMENTATION: "The signature string written at the beginning of the binary save file to identify it. Can't be changed while logging."
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "save_file_signature"), "set_save_file_signature", "get_save_file_signature");
     
 }
@@ -109,26 +108,26 @@ bool ACTelemetry::is_currently_logging() const { return is_logging; }
 double ACTelemetry::get_sample_interval() const { return sample_interval; }
 void ACTelemetry::set_sample_interval(double p_sample_interval) {
     if (p_sample_interval <= 0.0) return;
-    if (!is_logging) sample_interval = p_sample_interval; // disable while logging
+    if (!is_logging) sample_interval = p_sample_interval;
 }
 
 String ACTelemetry::get_save_file_signature() const { return save_file_signature; }
 void ACTelemetry::set_save_file_signature(String p_signature) {
     if (p_signature.is_empty()) return;
-    if (!is_logging) save_file_signature = p_signature; // disable while logging
+    if (!is_logging) save_file_signature = p_signature;
 }
 
 String ACTelemetry::connect_to_ac() {
     is_connected = false;
 
-    // cleanup existing handles before retrying
+    // cleanup existing handles
     if (dataPhysics) { UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; }
     if (dataGraphic) { UnmapViewOfFile(dataGraphic); dataGraphic = nullptr; }
     if (hMapPhysics) { CloseHandle(hMapPhysics); hMapPhysics = nullptr; }
     if (hMapGraphic) { CloseHandle(hMapGraphic); hMapGraphic = nullptr; }
 
 
-    // try to open physics map
+    // physics map
     hMapPhysics = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_physics");
     if (hMapPhysics == NULL) {
         DWORD err = GetLastError();
@@ -144,7 +143,7 @@ String ACTelemetry::connect_to_ac() {
     }
 
 
-    // try to open graphic map
+    // graphic map
     hMapGraphic = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_graphics");
     if (hMapGraphic == NULL) {
         // clear physics
@@ -168,7 +167,7 @@ String ACTelemetry::connect_to_ac() {
     }
 
 
-    // try to open static map
+    // static map
     hMapStatic = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_static");
     if (hMapStatic == NULL) {
         // clear physics
@@ -198,13 +197,12 @@ String ACTelemetry::connect_to_ac() {
         return vformat("Static MapViewOfFile failed (%d): %s", int64_t(err), win_error_string(err));
     }
 
-    // finalize connection status
     is_connected = true;
     return String("");
 }
 
 void ACTelemetry::disconnect_from_ac() {
-    finish_logging(); // finish logging (if it's logging)
+    finish_logging();
 
     is_connected = false;
     if (dataPhysics) { UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; }
@@ -216,9 +214,8 @@ void ACTelemetry::disconnect_from_ac() {
 }
 
 void ACTelemetry::_process(double delta) {
-    // check if pointers are still valid
     if (!dataPhysics || !dataGraphic) {
-        if (is_connected) {
+        if (is_connected) { // connection lost
             is_connected = false;
             finish_logging(session_output_file_path);
             emit_signal("connection_lost");
@@ -258,7 +255,7 @@ String ACTelemetry::finish_logging(String output_file_path) {
     String output = output_file_path;
     if (output.is_empty()) output = session_output_file_path;
 
-    // convert godot path to fs path if needed
+    // convert godot path to fs path
     String os_path = output;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
@@ -307,7 +304,7 @@ String ACTelemetry::finish_logging(String output_file_path) {
         return String("Write error while writing total_laps (" + String::num_int64(total_laps) + ") to '" + os_path + "'");
     }
 
-    // write sessions (include lap index in messages)
+    // write sessions
     for (uint64_t idx = 0; idx < sessions_data.size(); ++idx) {
         const auto &lap = sessions_data[idx];
         uint64_t lap_size = static_cast<uint64_t>(lap.size());
@@ -328,7 +325,7 @@ String ACTelemetry::finish_logging(String output_file_path) {
     }
 
     outfile.close();
-    sessions_data.clear(); // free ram after saving
+    sessions_data.clear();
 
     return os_path;
 }
@@ -339,7 +336,7 @@ String ACTelemetry::load_session_data(String file_path) {
     // clear previous data
     loaded_session_data.clear();
 
-    // convert godot path (res:// or user://) to filesystem path if needed
+    // convert godot path to fs path
     String os_path = file_path;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
@@ -349,14 +346,13 @@ String ACTelemetry::load_session_data(String file_path) {
     CharString cs = os_path.utf8();
     std::string path(cs.get_data(), cs.length());
 
-    // open the file in binary mode
+    
     std::ifstream infile(path, std::ios::binary);
     if (!infile.is_open()) {
         return String("Could not open file for reading: ") + os_path;
     }
 
-    // read and check signature
-    // we use a buffer with size + 1 for safety
+    // read & check signature
     int sig_len = save_file_signature.utf8().length();
     std::vector<char> sig_buffer(sig_len);
     infile.read(sig_buffer.data(), sig_len);
@@ -403,7 +399,7 @@ String ACTelemetry::load_session_data(String file_path) {
             std::vector<TelemetrySnapshot> lap_data;
             lap_data.resize(lap_size);
 
-            // read entire lap block into vector memory
+            // read entire lap block
             infile.read(reinterpret_cast<char*>(lap_data.data()), lap_size * sizeof(TelemetrySnapshot));
             
             if (infile.fail()) {
@@ -443,6 +439,52 @@ TypedArray<GDTelemetrySnapshot> ACTelemetry::get_loaded_session_lap_data(int lap
     }
 
     return out;
+}
+
+Dictionary ACTelemetry::get_loaded_session_lap_stats(int lap_index) {
+    Dictionary stats;
+    if (lap_index < 0 || lap_index >= loaded_session_data.size()) return stats;
+
+    const auto &lap = loaded_session_data[lap_index];
+    if (lap.empty()) return stats;
+
+    int lap_time = 0;
+    Array sector_times;
+    float top_speed = 0.0f;
+    int current_sec_idx = lap[0].graphic.currentSectorIndex;
+
+    for (size_t i = 0; i < lap.size(); i++) {
+        const auto &snap = lap[i];
+        
+        // detect sector change
+        if (snap.graphic.currentSectorIndex != current_sec_idx) {
+            sector_times.push_back(snap.graphic.lastSectorTime);
+            current_sec_idx = snap.graphic.currentSectorIndex;
+        }
+
+        if (snap.physics.speedKmh > top_speed) {
+            top_speed = snap.physics.speedKmh;
+        }
+    }
+
+    // try to get the exact lap_time and final sector time from the next lap
+    if (lap_index + 1 < loaded_session_data.size() && !loaded_session_data[lap_index + 1].empty()) {
+        const auto &next_lap_first_snap = loaded_session_data[lap_index + 1][0];
+        lap_time = next_lap_first_snap.graphic.iLastTime;
+        
+        if (next_lap_first_snap.graphic.currentSectorIndex == 0 && current_sec_idx != 0) {
+            sector_times.push_back(next_lap_first_snap.graphic.lastSectorTime);
+        }
+    } else {
+        lap_time = lap.back().graphic.iCurrentTime;
+    }
+
+    stats["lap_time_ms"] = lap_time;
+    stats["sector_times_ms"] = sector_times;
+    stats["top_speed_kmh"] = top_speed;
+    stats["snapshot_count"] = (int)lap.size();
+    
+    return stats;
 }
 
 Dictionary ACTelemetry::get_loaded_session_static_data() {
@@ -526,8 +568,15 @@ void ACTelemetry::logging_loop() {
     auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(sample_interval));
     auto next_tick = std::chrono::steady_clock::now();
 
+    timeBeginPeriod(1);
+
     while (is_logging) {
-        next_tick += interval;
+        auto now = std::chrono::steady_clock::now();
+        if (next_tick < now) {
+            next_tick = now + interval;
+        } else {
+            next_tick += interval;
+        }
 
         if (dataGraphic && dataPhysics) {
             if (dataGraphic->status != AC_LIVE) {
@@ -569,4 +618,6 @@ void ACTelemetry::logging_loop() {
 
         std::this_thread::sleep_until(next_tick);
     }
+
+    timeEndPeriod(1);
 }
