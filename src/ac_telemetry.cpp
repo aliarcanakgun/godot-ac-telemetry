@@ -74,6 +74,7 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("finish_logging", "output_file_path"), &ACTelemetry::finish_logging, DEFVAL(""));
 
     ClassDB::bind_method(D_METHOD("get_live_static_data"), &ACTelemetry::get_live_static_data);
+    ClassDB::bind_method(D_METHOD("get_live_snapshot"), &ACTelemetry::get_live_snapshot);
 
     ClassDB::bind_method(D_METHOD("load_session_data", "file_path"), &ACTelemetry::load_session_data);
     ClassDB::bind_method(D_METHOD("close_loaded_session"), &ACTelemetry::close_loaded_session);
@@ -419,6 +420,24 @@ Dictionary ACTelemetry::get_live_static_data() {
     if (!is_logging) return Dictionary();
     if (!dataStatic) return Dictionary();
     return _static_to_dict(*dataStatic);
+}
+
+Ref<GDTelemetrySnapshot> ACTelemetry::get_live_snapshot() {
+    Ref<GDTelemetrySnapshot> snapshot;
+    snapshot.instantiate();
+
+    if (!is_connected || !dataPhysics || !dataGraphic) {
+        return snapshot;
+    }
+
+    TelemetrySnapshot raw_snapshot;
+    raw_snapshot.timestamp = dataGraphic->iCurrentTime / 1000.0;
+    raw_snapshot.physics = *dataPhysics;
+    raw_snapshot.graphic = *dataGraphic;
+
+    snapshot->fill_from_snapshot(raw_snapshot);
+
+    return snapshot;
 }
 
 TypedArray<GDTelemetrySnapshot> ACTelemetry::get_loaded_session_lap_data(int lap_index) {

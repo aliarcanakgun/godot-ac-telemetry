@@ -81,6 +81,7 @@ namespace godot {
         String finish_logging(String output_file_path = "");
 
         Dictionary get_live_static_data();
+        Ref<GDTelemetrySnapshot> get_live_snapshot();
 
         String load_session_data(String file_path);
         TypedArray<GDTelemetrySnapshot> get_loaded_session_lap_data(int lap_index);

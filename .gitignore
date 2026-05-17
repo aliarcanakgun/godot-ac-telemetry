@@ -13,3 +13,4 @@ demo/addons/ac-telemetry/bin/*
 # Development Files
 demo/*.bin
 doc.pdf
+todo.md
