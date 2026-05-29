@@ -3,7 +3,7 @@
 #include <godot_cpp/classes/node.hpp>
 #include "telemetry_data_structs.h"
 #include "telemetry_enums.h"
-#include "gd_telemetry_snapshot.h"
+#include "gd_lap_telemetry.h"
 #include <windows.h>
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
@@ -30,13 +30,17 @@ namespace godot {
 
         // logging logic
         double sample_interval = 0.02; // 50 hz
+        double samples_per_meter = 1.0;
+        double last_recorded_meter = -1.0;
         String session_output_file_path = "";
         
-        std::vector<std::vector<TelemetrySnapshot>> sessions_data;
-        std::vector<std::vector<TelemetrySnapshot>> loaded_session_data;
+        std::vector<LapDataChannels> sessions_data;
+        std::vector<LapDataChannels> loaded_session_data;
         SPageStatic loaded_session_static_data;
         double loaded_session_sample_interval = 0.0;
+        double loaded_session_samples_per_meter = 0.0;
         int loaded_session_lap_count = -1;
+        std::vector<uint64_t> loaded_session_lap_offsets;
 
         String save_file_signature = "ACTL"; 
 
@@ -70,6 +74,9 @@ namespace godot {
         double get_sample_interval() const; // getter
         void set_sample_interval(double p_sample_interval); // setter
 
+        double get_samples_per_meter() const; // getter
+        void set_samples_per_meter(double p_samples_per_meter); // setter
+
         String connect_to_ac();
         void disconnect_from_ac();
         
@@ -81,14 +88,15 @@ namespace godot {
         String finish_logging(String output_file_path = "");
 
         Dictionary get_live_static_data();
-        Ref<GDTelemetrySnapshot> get_live_snapshot();
+        Ref<GDLapTelemetry> get_live_snapshot();
 
         String load_session_data(String file_path);
-        TypedArray<GDTelemetrySnapshot> get_loaded_session_lap_data(int lap_index);
+        Ref<GDLapTelemetry> get_loaded_session_lap_data(int lap_index);
         Dictionary get_loaded_session_lap_stats(int lap_index);
         Dictionary get_loaded_session_static_data();
         int get_loaded_session_lap_count();
         double get_loaded_session_sample_interval();
+        double get_loaded_session_samples_per_meter();
         void close_loaded_session();
         
         static Dictionary _static_to_dict(const SPageStatic &s);

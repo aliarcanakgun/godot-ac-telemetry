@@ -1,6 +1,6 @@
 #include "ac_telemetry.h"
 #include "telemetry_data_structs.h"
-#include "gd_telemetry_snapshot.h"
+#include "gd_lap_telemetry.h"
 #include "helper.h"
 
 #include <godot_cpp/core/class_db.hpp>
@@ -80,6 +80,7 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("close_loaded_session"), &ACTelemetry::close_loaded_session);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_count"), &ACTelemetry::get_loaded_session_lap_count);
     ClassDB::bind_method(D_METHOD("get_loaded_session_sample_interval"), &ACTelemetry::get_loaded_session_sample_interval);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_samples_per_meter"), &ACTelemetry::get_loaded_session_samples_per_meter);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_data", "lap_index"), &ACTelemetry::get_loaded_session_lap_data);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_stats", "lap_index"), &ACTelemetry::get_loaded_session_lap_stats);
     ClassDB::bind_method(D_METHOD("get_loaded_session_static_data"), &ACTelemetry::get_loaded_session_static_data);
@@ -93,11 +94,15 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_sample_interval"), &ACTelemetry::get_sample_interval);
     ClassDB::bind_method(D_METHOD("set_sample_interval"), &ACTelemetry::set_sample_interval);
 
+    ClassDB::bind_method(D_METHOD("get_samples_per_meter"), &ACTelemetry::get_samples_per_meter);
+    ClassDB::bind_method(D_METHOD("set_samples_per_meter"), &ACTelemetry::set_samples_per_meter);
+
     ClassDB::bind_method(D_METHOD("get_save_file_signature"), &ACTelemetry::get_save_file_signature);
     ClassDB::bind_method(D_METHOD("set_save_file_signature"), &ACTelemetry::set_save_file_signature);
 
     // properties
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval"), "set_sample_interval", "get_sample_interval");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "samples_per_meter"), "set_samples_per_meter", "get_samples_per_meter");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "save_file_signature"), "set_save_file_signature", "get_save_file_signature");
     
 }
@@ -110,6 +115,12 @@ double ACTelemetry::get_sample_interval() const { return sample_interval; }
 void ACTelemetry::set_sample_interval(double p_sample_interval) {
     if (p_sample_interval <= 0.0) return;
     if (!is_logging) sample_interval = p_sample_interval;
+}
+
+double ACTelemetry::get_samples_per_meter() const { return samples_per_meter; }
+void ACTelemetry::set_samples_per_meter(double p_samples_per_meter) {
+    if (p_samples_per_meter <= 0.0) return;
+    if (!is_logging) samples_per_meter = p_samples_per_meter;
 }
 
 String ACTelemetry::get_save_file_signature() const { return save_file_signature; }
@@ -234,6 +245,7 @@ String ACTelemetry::start_logging(String output_file_path) {
     last_lap_count = 0;
     last_physics_packet_id = -1;
     last_i_current_time = 0;
+    last_recorded_meter = -1.0;
     is_logging = true;
 
     logging_thread = std::thread(&ACTelemetry::logging_loop, this);
@@ -297,6 +309,13 @@ String ACTelemetry::finish_logging(String output_file_path) {
         return String("Write error while writing sample_interval (double) to '" + os_path + "'");
     }
 
+    // write samples per meter
+    outfile.write(reinterpret_cast<const char*>(&samples_per_meter), sizeof(double));
+    if (outfile.fail()) {
+        outfile.close();
+        return String("Write error while writing samples_per_meter (double) to '" + os_path + "'");
+    }
+
     // write total laps count
     uint64_t total_laps = sessions_data.size();
     outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
@@ -305,25 +324,29 @@ String ACTelemetry::finish_logging(String output_file_path) {
         return String("Write error while writing total_laps (" + String::num_int64(total_laps) + ") to '" + os_path + "'");
     }
 
+    // allocate space for lap offsets (ToC)
+    std::streampos offsets_pos = outfile.tellp();
+    std::vector<uint64_t> lap_offsets(total_laps, 0);
+    outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
+    if (outfile.fail()) {
+        outfile.close();
+        return String("Write error while writing lap offsets placeholder to '" + os_path + "'");
+    }
+
     // write sessions
     for (uint64_t idx = 0; idx < sessions_data.size(); ++idx) {
-        const auto &lap = sessions_data[idx];
-        uint64_t lap_size = static_cast<uint64_t>(lap.size());
-        outfile.write(reinterpret_cast<const char*>(&lap_size), sizeof(lap_size));
+        lap_offsets[idx] = outfile.tellp();
+        sessions_data[idx].write_to_stream(outfile);
 
         if (outfile.fail()) {
             outfile.close();
-            return String("Write error while writing lap_size for lap " + String::num_uint64(idx) + " to '" + os_path + "'");
-        }
-
-        if (lap_size > 0) {
-            outfile.write(reinterpret_cast<const char*>(lap.data()), lap_size * sizeof(TelemetrySnapshot));
-            if (outfile.fail()) {
-                outfile.close();
-                return String("Write error while writing telemetry data for lap " + String::num_uint64(idx) + " (snapshots: " + String::num_uint64(lap_size) + ") to '" + os_path + "'");
-            }
+            return String("Write error while writing telemetry data for lap " + String::num_uint64(idx) + " to '" + os_path + "'");
         }
     }
+
+    // rewrite real offsets
+    outfile.seekp(offsets_pos);
+    outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
 
     outfile.close();
     sessions_data.clear();
@@ -378,6 +401,13 @@ String ACTelemetry::load_session_data(String file_path) {
         return String("Failed to read sample interval");
     }
 
+    // read samples per meter
+    infile.read(reinterpret_cast<char*>(&loaded_session_samples_per_meter), sizeof(double));
+    if (infile.fail()) {
+        infile.close();
+        return String("Failed to read samples per meter");
+    }
+
     // read total laps count
     loaded_session_lap_count = 0;
     infile.read(reinterpret_cast<char*>(&loaded_session_lap_count), sizeof(uint64_t));
@@ -386,30 +416,25 @@ String ACTelemetry::load_session_data(String file_path) {
         return String("Failed to read total laps count");
     }
 
-    // read each lap data
-    for (uint64_t i = 0; i < loaded_session_lap_count; ++i) {
-        uint64_t lap_size = 0;
-        infile.read(reinterpret_cast<char*>(&lap_size), sizeof(lap_size));
-        
+    // read lap offsets
+    loaded_session_lap_offsets.resize(loaded_session_lap_count);
+    if (loaded_session_lap_count > 0) {
+        infile.read(reinterpret_cast<char*>(loaded_session_lap_offsets.data()), loaded_session_lap_count * sizeof(uint64_t));
         if (infile.fail()) {
             infile.close();
-            return String("Unexpected end of file while reading lap size");
+            return String("Failed to read lap offsets");
         }
+    }
 
-        if (lap_size > 0) {
-            std::vector<TelemetrySnapshot> lap_data;
-            lap_data.resize(lap_size);
-
-            // read entire lap block
-            infile.read(reinterpret_cast<char*>(lap_data.data()), lap_size * sizeof(TelemetrySnapshot));
-            
-            if (infile.fail()) {
-                infile.close();
-                return String("Failed to read snapshot data for lap " + String::num_uint64(i));
-            }
-
-            loaded_session_data.push_back(lap_data);
+    // read each lap data
+    for (int i = 0; i < loaded_session_lap_count; ++i) {
+        LapDataChannels lap_data;
+        lap_data.read_from_stream(infile);
+        if (infile.fail()) {
+            infile.close();
+            return String("Failed to read snapshot data for lap " + String::num_int64(i));
         }
+        loaded_session_data.push_back(lap_data);
     }
 
     infile.close();
@@ -422,42 +447,34 @@ Dictionary ACTelemetry::get_live_static_data() {
     return _static_to_dict(*dataStatic);
 }
 
-Ref<GDTelemetrySnapshot> ACTelemetry::get_live_snapshot() {
-    Ref<GDTelemetrySnapshot> snapshot;
+Ref<GDLapTelemetry> ACTelemetry::get_live_snapshot() {
+    Ref<GDLapTelemetry> snapshot;
     snapshot.instantiate();
 
     if (!is_connected || !dataPhysics || !dataGraphic) {
         return snapshot;
     }
 
-    TelemetrySnapshot raw_snapshot;
-    raw_snapshot.timestamp = dataGraphic->iCurrentTime / 1000.0;
-    raw_snapshot.physics = *dataPhysics;
-    raw_snapshot.graphic = *dataGraphic;
-
-    snapshot->fill_from_snapshot(raw_snapshot);
+    if (!sessions_data.empty()) {
+        std::lock_guard<std::mutex> lock(data_mutex);
+        snapshot->fill_from_channels(sessions_data.back());
+    }
 
     return snapshot;
 }
 
-TypedArray<GDTelemetrySnapshot> ACTelemetry::get_loaded_session_lap_data(int lap_index) {
-    if (lap_index < 0 || lap_index >= loaded_session_data.size()) return TypedArray<GDTelemetrySnapshot>();
-
-    const auto &lap = loaded_session_data[lap_index];
-    const int64_t count = (int64_t)lap.size();
-
-    TypedArray<GDTelemetrySnapshot> out;
-    out.resize(count);
-
-    for (int64_t i = 0; i < count; ++i) {
-        Ref<GDTelemetrySnapshot> data;
-        data.instantiate();
-        data->fill_from_snapshot(lap[i]);
-
-        out[i] = data;
+Ref<GDLapTelemetry> ACTelemetry::get_loaded_session_lap_data(int lap_index) {
+    if (lap_index < 0 || lap_index >= loaded_session_data.size()) {
+        Ref<GDLapTelemetry> empty;
+        empty.instantiate();
+        return empty;
     }
 
-    return out;
+    Ref<GDLapTelemetry> data;
+    data.instantiate();
+    data->fill_from_channels(loaded_session_data[lap_index]);
+
+    return data;
 }
 
 Dictionary ACTelemetry::get_loaded_session_lap_stats(int lap_index) {
@@ -465,43 +482,41 @@ Dictionary ACTelemetry::get_loaded_session_lap_stats(int lap_index) {
     if (lap_index < 0 || lap_index >= loaded_session_data.size()) return stats;
 
     const auto &lap = loaded_session_data[lap_index];
-    if (lap.empty()) return stats;
+    if (lap.timestamp.empty()) return stats;
 
     int lap_time = 0;
     Array sector_times;
     float top_speed = 0.0f;
-    int current_sec_idx = lap[0].graphic.currentSectorIndex;
+    int current_sec_idx = lap.currentSectorIndex[0];
 
-    for (size_t i = 0; i < lap.size(); i++) {
-        const auto &snap = lap[i];
-        
+    for (size_t i = 0; i < lap.timestamp.size(); i++) {
         // detect sector change
-        if (snap.graphic.currentSectorIndex != current_sec_idx) {
-            sector_times.push_back(snap.graphic.lastSectorTime);
-            current_sec_idx = snap.graphic.currentSectorIndex;
+        if (lap.currentSectorIndex[i] != current_sec_idx) {
+            sector_times.push_back(lap.lastSectorTime[i]);
+            current_sec_idx = lap.currentSectorIndex[i];
         }
 
-        if (snap.physics.speedKmh > top_speed) {
-            top_speed = snap.physics.speedKmh;
+        if (lap.speedKmh[i] > top_speed) {
+            top_speed = lap.speedKmh[i];
         }
     }
 
     // try to get the exact lap_time and final sector time from the next lap
-    if (lap_index + 1 < loaded_session_data.size() && !loaded_session_data[lap_index + 1].empty()) {
-        const auto &next_lap_first_snap = loaded_session_data[lap_index + 1][0];
-        lap_time = next_lap_first_snap.graphic.iLastTime;
+    if (lap_index + 1 < loaded_session_data.size() && !loaded_session_data[lap_index + 1].timestamp.empty()) {
+        const auto &next_lap = loaded_session_data[lap_index + 1];
+        lap_time = next_lap.iLastTime[0];
         
-        if (next_lap_first_snap.graphic.currentSectorIndex == 0 && current_sec_idx != 0) {
-            sector_times.push_back(next_lap_first_snap.graphic.lastSectorTime);
+        if (next_lap.currentSectorIndex[0] == 0 && current_sec_idx != 0) {
+            sector_times.push_back(next_lap.lastSectorTime[0]);
         }
     } else {
-        lap_time = lap.back().graphic.iCurrentTime;
+        lap_time = lap.iCurrentTime.back();
     }
 
     stats["lap_time_ms"] = lap_time;
     stats["sector_times_ms"] = sector_times;
     stats["top_speed_kmh"] = top_speed;
-    stats["snapshot_count"] = (int)lap.size();
+    stats["snapshot_count"] = (int)lap.timestamp.size();
     
     return stats;
 }
@@ -518,11 +533,19 @@ double ACTelemetry::get_loaded_session_sample_interval() {
     return loaded_session_sample_interval;
 }
 
+double ACTelemetry::get_loaded_session_samples_per_meter() {
+    return loaded_session_samples_per_meter;
+}
+
 void ACTelemetry::close_loaded_session() {
     loaded_session_data.clear();
     loaded_session_data.shrink_to_fit();
 
+    loaded_session_lap_offsets.clear();
+    loaded_session_lap_offsets.shrink_to_fit();
+
     loaded_session_sample_interval = 0.0;
+    loaded_session_samples_per_meter = 0.0;
     loaded_session_lap_count = -1;
     
     loaded_session_static_data = {};
@@ -623,15 +646,235 @@ void ACTelemetry::logging_loop() {
                 }
 
                 if (lap_changed || sessions_data.empty()) {
-                    sessions_data.push_back(std::vector<TelemetrySnapshot>());
+                    sessions_data.push_back(LapDataChannels());
+                    last_recorded_meter = -INFINITY;
                 }
 
-                TelemetrySnapshot snapshot;
-                snapshot.timestamp = dataGraphic->iCurrentTime / 1000.0;
-                snapshot.physics = *dataPhysics;
-                snapshot.graphic = *dataGraphic;
+                // calculate current position in meters
+                double current_meter = dataGraphic->normalizedCarPosition * dataStatic->trackSPlineLength;
+                double distance_threshold = 1.0 / samples_per_meter;
 
-                sessions_data.back().push_back(snapshot);
+                // check if we moved enough to record a new sample
+                if (last_recorded_meter < 0.0 || std::abs(current_meter - last_recorded_meter) >= distance_threshold) {
+                    last_recorded_meter = current_meter;
+                    auto& lap = sessions_data.back();
+
+                    // graphic basics
+                    lap.timestamp.push_back(dataGraphic->iCurrentTime / 1000.0);
+                    lap.packetId_graphic.push_back(dataGraphic->packetId);
+                    lap.iCurrentTime.push_back(dataGraphic->iCurrentTime);
+                    lap.iLastTime.push_back(dataGraphic->iLastTime);
+                    lap.iBestTime.push_back(dataGraphic->iBestTime);
+                    lap.normalizedCarPosition.push_back(dataGraphic->normalizedCarPosition);
+                    lap.distanceTraveled.push_back(dataGraphic->distanceTraveled);
+                    lap.replayTimeMultiplier.push_back(dataGraphic->replayTimeMultiplier);
+                    lap.numberOfLaps.push_back(dataGraphic->numberOfLaps);
+                    lap.completedLaps.push_back(dataGraphic->completedLaps);
+                    
+                    // graphic strings
+                    auto push_str = [](auto& target_vec, const wchar_t* src, size_t size) {
+                        target_vec.emplace_back();
+                        std::memcpy(target_vec.back().data(), src, size * sizeof(wchar_t));
+                    };
+                    push_str(lap.currentTime, dataGraphic->currentTime, 15);
+                    push_str(lap.lastTime, dataGraphic->lastTime, 15);
+                    push_str(lap.bestTime, dataGraphic->bestTime, 15);
+                    push_str(lap.split, dataGraphic->split, 15);
+                    push_str(lap.tyreCompound, dataGraphic->tyreCompound, 33);
+
+                    // physics basics
+                    lap.packetId_physics.push_back(dataPhysics->packetId);
+                    lap.gas.push_back(dataPhysics->gas);
+                    lap.brake.push_back(dataPhysics->brake);
+                    lap.fuel.push_back(dataPhysics->fuel);
+                    lap.gear.push_back(dataPhysics->gear);
+                    lap.rpms.push_back(dataPhysics->rpms);
+                    lap.steerAngle.push_back(dataPhysics->steerAngle);
+                    lap.speedKmh.push_back(dataPhysics->speedKmh);
+                    lap.isAIControlled.push_back(dataPhysics->isAIControlled);
+
+                    // vectors
+                    lap.velocity_x.push_back(dataPhysics->velocity[0]);
+                    lap.velocity_y.push_back(dataPhysics->velocity[1]);
+                    lap.velocity_z.push_back(dataPhysics->velocity[2]);
+                    
+                    lap.accG_x.push_back(dataPhysics->accG[0]);
+                    lap.accG_y.push_back(dataPhysics->accG[1]);
+                    lap.accG_z.push_back(dataPhysics->accG[2]);
+
+                    // wheels
+                    lap.wheelSlip_fl.push_back(dataPhysics->wheelSlip[0]);
+                    lap.wheelSlip_fr.push_back(dataPhysics->wheelSlip[1]);
+                    lap.wheelSlip_rl.push_back(dataPhysics->wheelSlip[2]);
+                    lap.wheelSlip_rr.push_back(dataPhysics->wheelSlip[3]);
+
+                    lap.wheelLoad_fl.push_back(dataPhysics->wheelLoad[0]);
+                    lap.wheelLoad_fr.push_back(dataPhysics->wheelLoad[1]);
+                    lap.wheelLoad_rl.push_back(dataPhysics->wheelLoad[2]);
+                    lap.wheelLoad_rr.push_back(dataPhysics->wheelLoad[3]);
+
+                    lap.wheelsPressure_fl.push_back(dataPhysics->wheelsPressure[0]);
+                    lap.wheelsPressure_fr.push_back(dataPhysics->wheelsPressure[1]);
+                    lap.wheelsPressure_rl.push_back(dataPhysics->wheelsPressure[2]);
+                    lap.wheelsPressure_rr.push_back(dataPhysics->wheelsPressure[3]);
+
+                    lap.wheelAngularSpeed_fl.push_back(dataPhysics->wheelAngularSpeed[0]);
+                    lap.wheelAngularSpeed_fr.push_back(dataPhysics->wheelAngularSpeed[1]);
+                    lap.wheelAngularSpeed_rl.push_back(dataPhysics->wheelAngularSpeed[2]);
+                    lap.wheelAngularSpeed_rr.push_back(dataPhysics->wheelAngularSpeed[3]);
+
+                    lap.tyreWear_fl.push_back(dataPhysics->tyreWear[0]);
+                    lap.tyreWear_fr.push_back(dataPhysics->tyreWear[1]);
+                    lap.tyreWear_rl.push_back(dataPhysics->tyreWear[2]);
+                    lap.tyreWear_rr.push_back(dataPhysics->tyreWear[3]);
+
+                    lap.tyreDirtyLevel_fl.push_back(dataPhysics->tyreDirtyLevel[0]);
+                    lap.tyreDirtyLevel_fr.push_back(dataPhysics->tyreDirtyLevel[1]);
+                    lap.tyreDirtyLevel_rl.push_back(dataPhysics->tyreDirtyLevel[2]);
+                    lap.tyreDirtyLevel_rr.push_back(dataPhysics->tyreDirtyLevel[3]);
+
+                    lap.tyreCoreTemperature_fl.push_back(dataPhysics->tyreCoreTemperature[0]);
+                    lap.tyreCoreTemperature_fr.push_back(dataPhysics->tyreCoreTemperature[1]);
+                    lap.tyreCoreTemperature_rl.push_back(dataPhysics->tyreCoreTemperature[2]);
+                    lap.tyreCoreTemperature_rr.push_back(dataPhysics->tyreCoreTemperature[3]);
+
+                    lap.camberRAD_fl.push_back(dataPhysics->camberRAD[0]);
+                    lap.camberRAD_fr.push_back(dataPhysics->camberRAD[1]);
+                    lap.camberRAD_rl.push_back(dataPhysics->camberRAD[2]);
+                    lap.camberRAD_rr.push_back(dataPhysics->camberRAD[3]);
+
+                    lap.suspensionTravel_fl.push_back(dataPhysics->suspensionTravel[0]);
+                    lap.suspensionTravel_fr.push_back(dataPhysics->suspensionTravel[1]);
+                    lap.suspensionTravel_rl.push_back(dataPhysics->suspensionTravel[2]);
+                    lap.suspensionTravel_rr.push_back(dataPhysics->suspensionTravel[3]);
+
+                    lap.brakeTemp_fl.push_back(dataPhysics->brakeTemp[0]);
+                    lap.brakeTemp_fr.push_back(dataPhysics->brakeTemp[1]);
+                    lap.brakeTemp_rl.push_back(dataPhysics->brakeTemp[2]);
+                    lap.brakeTemp_rr.push_back(dataPhysics->brakeTemp[3]);
+
+                    lap.tyreTempI_fl.push_back(dataPhysics->tyreTempI[0]);
+                    lap.tyreTempI_fr.push_back(dataPhysics->tyreTempI[1]);
+                    lap.tyreTempI_rl.push_back(dataPhysics->tyreTempI[2]);
+                    lap.tyreTempI_rr.push_back(dataPhysics->tyreTempI[3]);
+
+                    lap.tyreTempM_fl.push_back(dataPhysics->tyreTempM[0]);
+                    lap.tyreTempM_fr.push_back(dataPhysics->tyreTempM[1]);
+                    lap.tyreTempM_rl.push_back(dataPhysics->tyreTempM[2]);
+                    lap.tyreTempM_rr.push_back(dataPhysics->tyreTempM[3]);
+
+                    lap.tyreTempO_fl.push_back(dataPhysics->tyreTempO[0]);
+                    lap.tyreTempO_fr.push_back(dataPhysics->tyreTempO[1]);
+                    lap.tyreTempO_rl.push_back(dataPhysics->tyreTempO[2]);
+                    lap.tyreTempO_rr.push_back(dataPhysics->tyreTempO[3]);
+
+                    // tyre contact point
+                    lap.tyreContactPoint_fl_x.push_back(dataPhysics->tyreContactPoint[0][0]);
+                    lap.tyreContactPoint_fl_y.push_back(dataPhysics->tyreContactPoint[0][1]);
+                    lap.tyreContactPoint_fl_z.push_back(dataPhysics->tyreContactPoint[0][2]);
+                    lap.tyreContactPoint_fr_x.push_back(dataPhysics->tyreContactPoint[1][0]);
+                    lap.tyreContactPoint_fr_y.push_back(dataPhysics->tyreContactPoint[1][1]);
+                    lap.tyreContactPoint_fr_z.push_back(dataPhysics->tyreContactPoint[1][2]);
+                    lap.tyreContactPoint_rl_x.push_back(dataPhysics->tyreContactPoint[2][0]);
+                    lap.tyreContactPoint_rl_y.push_back(dataPhysics->tyreContactPoint[2][1]);
+                    lap.tyreContactPoint_rl_z.push_back(dataPhysics->tyreContactPoint[2][2]);
+                    lap.tyreContactPoint_rr_x.push_back(dataPhysics->tyreContactPoint[3][0]);
+                    lap.tyreContactPoint_rr_y.push_back(dataPhysics->tyreContactPoint[3][1]);
+                    lap.tyreContactPoint_rr_z.push_back(dataPhysics->tyreContactPoint[3][2]);
+
+                    // tyre contact normal
+                    lap.tyreContactNormal_fl_x.push_back(dataPhysics->tyreContactNormal[0][0]);
+                    lap.tyreContactNormal_fl_y.push_back(dataPhysics->tyreContactNormal[0][1]);
+                    lap.tyreContactNormal_fl_z.push_back(dataPhysics->tyreContactNormal[0][2]);
+                    lap.tyreContactNormal_fr_x.push_back(dataPhysics->tyreContactNormal[1][0]);
+                    lap.tyreContactNormal_fr_y.push_back(dataPhysics->tyreContactNormal[1][1]);
+                    lap.tyreContactNormal_fr_z.push_back(dataPhysics->tyreContactNormal[1][2]);
+                    lap.tyreContactNormal_rl_x.push_back(dataPhysics->tyreContactNormal[2][0]);
+                    lap.tyreContactNormal_rl_y.push_back(dataPhysics->tyreContactNormal[2][1]);
+                    lap.tyreContactNormal_rl_z.push_back(dataPhysics->tyreContactNormal[2][2]);
+                    lap.tyreContactNormal_rr_x.push_back(dataPhysics->tyreContactNormal[3][0]);
+                    lap.tyreContactNormal_rr_y.push_back(dataPhysics->tyreContactNormal[3][1]);
+                    lap.tyreContactNormal_rr_z.push_back(dataPhysics->tyreContactNormal[3][2]);
+
+                    // tyre contact heading
+                    lap.tyreContactHeading_fl_x.push_back(dataPhysics->tyreContactHeading[0][0]);
+                    lap.tyreContactHeading_fl_y.push_back(dataPhysics->tyreContactHeading[0][1]);
+                    lap.tyreContactHeading_fl_z.push_back(dataPhysics->tyreContactHeading[0][2]);
+                    lap.tyreContactHeading_fr_x.push_back(dataPhysics->tyreContactHeading[1][0]);
+                    lap.tyreContactHeading_fr_y.push_back(dataPhysics->tyreContactHeading[1][1]);
+                    lap.tyreContactHeading_fr_z.push_back(dataPhysics->tyreContactHeading[1][2]);
+                    lap.tyreContactHeading_rl_x.push_back(dataPhysics->tyreContactHeading[2][0]);
+                    lap.tyreContactHeading_rl_y.push_back(dataPhysics->tyreContactHeading[2][1]);
+                    lap.tyreContactHeading_rl_z.push_back(dataPhysics->tyreContactHeading[2][2]);
+                    lap.tyreContactHeading_rr_x.push_back(dataPhysics->tyreContactHeading[3][0]);
+                    lap.tyreContactHeading_rr_y.push_back(dataPhysics->tyreContactHeading[3][1]);
+                    lap.tyreContactHeading_rr_z.push_back(dataPhysics->tyreContactHeading[3][2]);
+
+                    // physics advanced
+                    lap.drs.push_back(dataPhysics->drs);
+                    lap.tc.push_back(dataPhysics->tc);
+                    lap.heading.push_back(dataPhysics->heading);
+                    lap.pitch.push_back(dataPhysics->pitch);
+                    lap.roll.push_back(dataPhysics->roll);
+                    lap.cgHeight.push_back(dataPhysics->cgHeight);
+                    lap.pitLimiterOn.push_back(dataPhysics->pitLimiterOn);
+                    lap.abs.push_back(dataPhysics->abs);
+                    lap.kersCharge.push_back(dataPhysics->kersCharge);
+                    lap.kersInput.push_back(dataPhysics->kersInput);
+                    lap.autoShifterOn.push_back(dataPhysics->autoShifterOn);
+                    lap.rideHeight_f.push_back(dataPhysics->rideHeight[0]);
+                    lap.rideHeight_r.push_back(dataPhysics->rideHeight[1]);
+                    lap.turboBoost.push_back(dataPhysics->turboBoost);
+                    lap.ballast.push_back(dataPhysics->ballast);
+                    lap.airDensity.push_back(dataPhysics->airDensity);
+                    lap.airTemp.push_back(dataPhysics->airTemp);
+                    lap.roadTemp.push_back(dataPhysics->roadTemp);
+                    lap.localAngularVel_x.push_back(dataPhysics->localAngularVel[0]);
+                    lap.localAngularVel_y.push_back(dataPhysics->localAngularVel[1]);
+                    lap.localAngularVel_z.push_back(dataPhysics->localAngularVel[2]);
+                    lap.finalFF.push_back(dataPhysics->finalFF);
+                    lap.performanceMeter.push_back(dataPhysics->performanceMeter);
+                    lap.engineBrake.push_back(dataPhysics->engineBrake);
+                    lap.ersRecoveryLevel.push_back(dataPhysics->ersRecoveryLevel);
+                    lap.ersPowerLevel.push_back(dataPhysics->ersPowerLevel);
+                    lap.ersHeatCharging.push_back(dataPhysics->ersHeatCharging);
+                    lap.ersIsCharging.push_back(dataPhysics->ersIsCharging);
+                    lap.kersCurrentKJ.push_back(dataPhysics->kersCurrentKJ);
+                    lap.drsAvailable.push_back(dataPhysics->drsAvailable);
+                    lap.drsEnabled.push_back(dataPhysics->drsEnabled);
+                    lap.clutch.push_back(dataPhysics->clutch);
+                    lap.brakeBias.push_back(dataPhysics->brakeBias);
+                    lap.localVelocity_x.push_back(dataPhysics->localVelocity[0]);
+                    lap.localVelocity_y.push_back(dataPhysics->localVelocity[1]);
+                    lap.localVelocity_z.push_back(dataPhysics->localVelocity[2]);
+
+                    lap.carDamage_0.push_back(dataPhysics->carDamage[0]);
+                    lap.carDamage_1.push_back(dataPhysics->carDamage[1]);
+                    lap.carDamage_2.push_back(dataPhysics->carDamage[2]);
+                    lap.carDamage_3.push_back(dataPhysics->carDamage[3]);
+                    lap.carDamage_4.push_back(dataPhysics->carDamage[4]);
+                    lap.numberOfTyresOut.push_back(dataPhysics->numberOfTyresOut);
+
+                    // graphic
+                    lap.status.push_back(dataGraphic->status);
+                    lap.session.push_back(dataGraphic->session);
+                    lap.position.push_back(dataGraphic->position);
+                    lap.sessionTimeLeft.push_back(dataGraphic->sessionTimeLeft);
+                    lap.isInPit.push_back(dataGraphic->isInPit);
+                    lap.currentSectorIndex.push_back(dataGraphic->currentSectorIndex);
+                    lap.lastSectorTime.push_back(dataGraphic->lastSectorTime);
+                    lap.carCoordinates_x.push_back(dataGraphic->carCoordinates[0]);
+                    lap.carCoordinates_y.push_back(dataGraphic->carCoordinates[1]);
+                    lap.carCoordinates_z.push_back(dataGraphic->carCoordinates[2]);
+                    lap.penaltyTime.push_back(dataGraphic->penaltyTime);
+                    lap.flag.push_back(dataGraphic->flag);
+                    lap.idealLineOn.push_back(dataGraphic->idealLineOn);
+                    lap.isInPitLane.push_back(dataGraphic->isInPitLane);
+                    lap.surfaceGrip.push_back(dataGraphic->surfaceGrip);
+                    lap.mandatoryPitDone.push_back(dataGraphic->mandatoryPitDone);
+                    lap.windSpeed.push_back(dataGraphic->windSpeed);
+                    lap.windDirection.push_back(dataGraphic->windDirection);
+                }
             }
         }
 
