@@ -97,8 +97,13 @@ namespace godot {
         int get_loaded_session_lap_count();
         double get_loaded_session_sample_interval();
         double get_loaded_session_samples_per_meter();
+        double get_loaded_session_lap_fuel_consumption(int lap_index);
+        double get_loaded_session_total_fuel_consumption();
+        double get_loaded_session_total_laps();
         void close_loaded_session();
         
+        PackedFloat32Array calculate_lap_time_delta(String target_file_path, int target_lap_index = 0, int current_lap_index = 0);
+
         static Dictionary _static_to_dict(const SPageStatic &s);
     };
 

@@ -84,6 +84,10 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_data", "lap_index"), &ACTelemetry::get_loaded_session_lap_data);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_stats", "lap_index"), &ACTelemetry::get_loaded_session_lap_stats);
     ClassDB::bind_method(D_METHOD("get_loaded_session_static_data"), &ACTelemetry::get_loaded_session_static_data);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_lap_fuel_consumption", "lap_index"), &ACTelemetry::get_loaded_session_lap_fuel_consumption);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_total_fuel_consumption"), &ACTelemetry::get_loaded_session_total_fuel_consumption);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_total_laps"), &ACTelemetry::get_loaded_session_total_laps);
+    ClassDB::bind_method(D_METHOD("calculate_lap_time_delta", "target_file_path", "target_lap_index", "current_lap_index"), &ACTelemetry::calculate_lap_time_delta, DEFVAL(0), DEFVAL(0));
 
     ClassDB::add_signal("ACTelemetry", MethodInfo("connection_lost"));
 
@@ -537,6 +541,67 @@ double ACTelemetry::get_loaded_session_samples_per_meter() {
     return loaded_session_samples_per_meter;
 }
 
+double ACTelemetry::get_loaded_session_lap_fuel_consumption(int lap_index) {
+    if (lap_index < 0 || lap_index >= loaded_session_data.size()) return 0.0;
+    const auto &lap = loaded_session_data[lap_index];
+    if (lap.fuel.empty()) return 0.0;
+
+    double consumed = 0.0;
+    float prev_fuel = lap.fuel[0];
+    for (size_t i = 1; i < lap.fuel.size(); i++) {
+        float current_fuel = lap.fuel[i];
+        if (current_fuel < prev_fuel) {
+            consumed += (prev_fuel - current_fuel);
+        }
+        prev_fuel = current_fuel;
+    }
+    return consumed;
+}
+
+double ACTelemetry::get_loaded_session_total_fuel_consumption() {
+    double total = 0.0;
+    for (int i = 0; i < loaded_session_data.size(); i++) {
+        total += get_loaded_session_lap_fuel_consumption(i);
+    }
+    return total;
+}
+
+double ACTelemetry::get_loaded_session_total_laps() {
+    double total_driven_fraction = 0.0;
+    bool has_prev = false;
+    double prev_pos = 0.0;
+    
+    for (size_t i = 0; i < loaded_session_data.size(); i++) {
+        const auto &lap = loaded_session_data[i];
+        if (lap.normalizedCarPosition.empty()) continue;
+        
+        for (size_t j = 0; j < lap.normalizedCarPosition.size(); j++) {
+            double curr_pos = lap.normalizedCarPosition[j];
+            
+            if (has_prev) {
+                double diff = curr_pos - prev_pos;
+                
+                if (diff < -0.5 && prev_pos > 0.8 && curr_pos < 0.2) {
+                    diff += 1.0;
+                } else if (diff > 0.5 && prev_pos < 0.2 && curr_pos > 0.8) {
+                    diff -= 1.0;
+                }
+                
+                if (std::abs(diff) > 0.1) {
+                    diff = 0.0; // ignore large jumps
+                }
+                
+                total_driven_fraction += diff;
+            }
+            
+            prev_pos = curr_pos;
+            has_prev = true;
+        }
+    }
+    
+    return total_driven_fraction;
+}
+
 void ACTelemetry::close_loaded_session() {
     loaded_session_data.clear();
     loaded_session_data.shrink_to_fit();
@@ -549,6 +614,123 @@ void ACTelemetry::close_loaded_session() {
     loaded_session_lap_count = -1;
     
     loaded_session_static_data = {};
+}
+
+PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path, int target_lap_index, int current_lap_index) {
+    PackedFloat32Array result;
+    if (target_file_path.is_empty() || current_lap_index < 0 || current_lap_index >= loaded_session_data.size()) return result;
+
+    String os_path = target_file_path;
+    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
+        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+    }
+
+    CharString cs = os_path.utf8();
+    std::string path(cs.get_data(), cs.length());
+
+    std::ifstream infile(path, std::ios::binary);
+    if (!infile.is_open()) return result;
+
+    int sig_len = save_file_signature.utf8().length();
+    std::vector<char> sig_buffer(sig_len);
+    infile.read(sig_buffer.data(), sig_len);
+    String read_sig = String::utf8(sig_buffer.data(), sig_len);
+    if (read_sig != save_file_signature) return result;
+
+    SPageStatic target_static_data;
+    infile.read(reinterpret_cast<char*>(&target_static_data), sizeof(SPageStatic));
+    if (infile.fail()) return result;
+
+    double dummy_interval, dummy_spm;
+    infile.read(reinterpret_cast<char*>(&dummy_interval), sizeof(double));
+    infile.read(reinterpret_cast<char*>(&dummy_spm), sizeof(double));
+
+    uint64_t target_lap_count = 0;
+    infile.read(reinterpret_cast<char*>(&target_lap_count), sizeof(uint64_t));
+    if (infile.fail() || target_lap_index < 0 || target_lap_index >= target_lap_count) return result;
+
+    std::vector<uint64_t> lap_offsets(target_lap_count);
+    infile.read(reinterpret_cast<char*>(lap_offsets.data()), target_lap_count * sizeof(uint64_t));
+    if (infile.fail()) return result;
+
+    infile.seekg(lap_offsets[target_lap_index]);
+    if (infile.fail()) return result;
+
+    LapDataChannels target_lap;
+    target_lap.read_from_stream(infile);
+    infile.close();
+
+    const LapDataChannels& current_lap = loaded_session_data[current_lap_index];
+
+    if (target_lap.normalizedCarPosition.empty() || target_lap.timestamp.empty() ||
+        current_lap.normalizedCarPosition.empty() || current_lap.timestamp.empty()) {
+        return result;
+    }
+
+    const std::vector<float>& raw_target_pos = target_lap.normalizedCarPosition;
+    const std::vector<double>& target_time = target_lap.timestamp;
+    
+    const std::vector<float>& raw_current_pos = current_lap.normalizedCarPosition;
+    const std::vector<double>& current_time = current_lap.timestamp;
+
+    int num_points = raw_current_pos.size();
+    result.resize(num_points);
+    float* ptr = result.ptrw();
+
+    int target_n = raw_target_pos.size();
+    if (target_n < 2 || num_points < 2) return result;
+
+    // handle wrap-around at the end of the lap
+    std::vector<float> target_pos(target_n);
+    target_pos[0] = raw_target_pos[0];
+    for (int i = 1; i < target_n; ++i) {
+        float p = raw_target_pos[i];
+        if (p < raw_target_pos[i - 1] - 0.5f) p += 1.0f;
+        target_pos[i] = p;
+    }
+
+    int target_idx = 0;
+    float last_curr_raw_p = raw_current_pos[0];
+    float curr_p_offset = 0.0f;
+
+    for (int i = 0; i < num_points; ++i) {
+        float raw_p = raw_current_pos[i];
+        
+        // unroll current position
+        if (i > 0 && raw_p < last_curr_raw_p - 0.5f) {
+            curr_p_offset += 1.0f;
+        }
+        last_curr_raw_p = raw_p;
+        float curr_p = raw_p + curr_p_offset;
+        
+        
+        while (target_idx < target_n - 1 && target_pos[target_idx + 1] < curr_p) {
+            target_idx++;
+        }
+        
+        float t_time;
+        if (target_idx >= target_n - 1) {
+            t_time = (float)target_time[target_n - 1];
+        } else if (curr_p <= target_pos[0]) {
+            t_time = (float)target_time[0];
+        } else {
+            float p1 = target_pos[target_idx];
+            float p2 = target_pos[target_idx + 1];
+            float t1 = (float)target_time[target_idx];
+            float t2 = (float)target_time[target_idx + 1];
+            
+            if (p2 - p1 > 0.000001f) {
+                float t = (curr_p - p1) / (p2 - p1);
+                t_time = t1 + t * (t2 - t1);
+            } else {
+                t_time = t1;
+            }
+        }
+        
+        ptr[i] = (float)current_time[i] - t_time;
+    }
+
+    return result;
 }
 
 Dictionary ACTelemetry::_static_to_dict(const SPageStatic &s) {
