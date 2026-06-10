@@ -102,7 +102,7 @@ namespace godot {
         double get_loaded_session_total_laps();
         void close_loaded_session();
         
-        PackedFloat32Array calculate_lap_time_delta(String target_file_path, int target_lap_index = 0, int current_lap_index = 0);
+        PackedFloat32Array calculate_lap_time_delta(String target_file_path, int target_lap_index = 0, String current_file_path = "", int current_lap_index = 0, PackedFloat32Array reference_positions = PackedFloat32Array());
 
         static Dictionary _static_to_dict(const SPageStatic &s);
     };

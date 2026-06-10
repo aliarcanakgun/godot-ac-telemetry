@@ -87,7 +87,7 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_fuel_consumption", "lap_index"), &ACTelemetry::get_loaded_session_lap_fuel_consumption);
     ClassDB::bind_method(D_METHOD("get_loaded_session_total_fuel_consumption"), &ACTelemetry::get_loaded_session_total_fuel_consumption);
     ClassDB::bind_method(D_METHOD("get_loaded_session_total_laps"), &ACTelemetry::get_loaded_session_total_laps);
-    ClassDB::bind_method(D_METHOD("calculate_lap_time_delta", "target_file_path", "target_lap_index", "current_lap_index"), &ACTelemetry::calculate_lap_time_delta, DEFVAL(0), DEFVAL(0));
+    ClassDB::bind_method(D_METHOD("calculate_lap_time_delta", "target_file_path", "target_lap_index", "current_file_path", "current_lap_index", "reference_positions"), &ACTelemetry::calculate_lap_time_delta, DEFVAL(0), DEFVAL(""), DEFVAL(0), DEFVAL(PackedFloat32Array()));
 
     ClassDB::add_signal("ACTelemetry", MethodInfo("connection_lost"));
 
@@ -612,59 +612,51 @@ void ACTelemetry::close_loaded_session() {
     loaded_session_sample_interval = 0.0;
     loaded_session_samples_per_meter = 0.0;
     loaded_session_lap_count = -1;
-    
     loaded_session_static_data = {};
 }
 
-PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path, int target_lap_index, int current_lap_index) {
+PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path, int target_lap_index, String current_file_path, int current_lap_index, PackedFloat32Array reference_positions) {
     PackedFloat32Array result;
-    if (target_file_path.is_empty() || current_lap_index < 0 || current_lap_index >= loaded_session_data.size()) return result;
+    if (target_file_path.is_empty() || target_lap_index < 0 || current_lap_index < 0) return result;
+    
+    String actual_curr_path = current_file_path.is_empty() ? target_file_path : current_file_path;
 
-    String os_path = target_file_path;
-    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
-        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
-    }
+    auto load_lap = [this](String file_path, int lap_index, LapDataChannels &out_lap) -> bool {
+        String os_path = file_path;
+        if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
+            os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+        }
+        CharString cs = os_path.utf8();
+        std::string path(cs.get_data(), cs.length());
+        std::ifstream infile(path, std::ios::binary);
+        if (!infile.is_open()) return false;
 
-    CharString cs = os_path.utf8();
-    std::string path(cs.get_data(), cs.length());
+        int sig_len = save_file_signature.utf8().length();
+        std::vector<char> sig_buffer(sig_len);
+        infile.read(sig_buffer.data(), sig_len);
+        String read_sig = String::utf8(sig_buffer.data(), sig_len);
+        if (read_sig != save_file_signature) return false;
 
-    std::ifstream infile(path, std::ios::binary);
-    if (!infile.is_open()) return result;
+        infile.seekg(sizeof(SPageStatic) + sizeof(double) * 2, std::ios::cur);
+        uint64_t lap_count = 0;
+        infile.read(reinterpret_cast<char*>(&lap_count), sizeof(uint64_t));
+        if (lap_index < 0 || lap_index >= lap_count) return false;
 
-    int sig_len = save_file_signature.utf8().length();
-    std::vector<char> sig_buffer(sig_len);
-    infile.read(sig_buffer.data(), sig_len);
-    String read_sig = String::utf8(sig_buffer.data(), sig_len);
-    if (read_sig != save_file_signature) return result;
+        std::vector<uint64_t> lap_offsets(lap_count);
+        infile.read(reinterpret_cast<char*>(lap_offsets.data()), lap_count * sizeof(uint64_t));
 
-    SPageStatic target_static_data;
-    infile.read(reinterpret_cast<char*>(&target_static_data), sizeof(SPageStatic));
-    if (infile.fail()) return result;
+        infile.seekg(lap_offsets[lap_index]);
+        out_lap.read_from_stream(infile);
+        return true;
+    };
 
-    double dummy_interval, dummy_spm;
-    infile.read(reinterpret_cast<char*>(&dummy_interval), sizeof(double));
-    infile.read(reinterpret_cast<char*>(&dummy_spm), sizeof(double));
-
-    uint64_t target_lap_count = 0;
-    infile.read(reinterpret_cast<char*>(&target_lap_count), sizeof(uint64_t));
-    if (infile.fail() || target_lap_index < 0 || target_lap_index >= target_lap_count) return result;
-
-    std::vector<uint64_t> lap_offsets(target_lap_count);
-    infile.read(reinterpret_cast<char*>(lap_offsets.data()), target_lap_count * sizeof(uint64_t));
-    if (infile.fail()) return result;
-
-    infile.seekg(lap_offsets[target_lap_index]);
-    if (infile.fail()) return result;
-
-    LapDataChannels target_lap;
-    target_lap.read_from_stream(infile);
-    infile.close();
-
-    const LapDataChannels& current_lap = loaded_session_data[current_lap_index];
-
-    if (target_lap.normalizedCarPosition.empty() || target_lap.timestamp.empty() ||
-        current_lap.normalizedCarPosition.empty() || current_lap.timestamp.empty()) {
-        return result;
+    LapDataChannels target_lap, current_lap;
+    if (!load_lap(target_file_path, target_lap_index, target_lap)) return result;
+    
+    if (actual_curr_path == target_file_path && current_lap_index == target_lap_index) {
+        current_lap = target_lap;
+    } else {
+        if (!load_lap(actual_curr_path, current_lap_index, current_lap)) return result;
     }
 
     const std::vector<float>& raw_target_pos = target_lap.normalizedCarPosition;
@@ -673,46 +665,81 @@ PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path
     const std::vector<float>& raw_current_pos = current_lap.normalizedCarPosition;
     const std::vector<double>& current_time = current_lap.timestamp;
 
-    int num_points = raw_current_pos.size();
-    result.resize(num_points);
-    float* ptr = result.ptrw();
-
     int target_n = raw_target_pos.size();
-    if (target_n < 2 || num_points < 2) return result;
+    int current_n = raw_current_pos.size();
+    if (target_n < 2 || current_n < 2) return result;
 
-    // handle wrap-around at the end of the lap
-    std::vector<float> target_pos(target_n);
-    target_pos[0] = raw_target_pos[0];
-    for (int i = 1; i < target_n; ++i) {
-        float p = raw_target_pos[i];
-        if (p < raw_target_pos[i - 1] - 0.5f) p += 1.0f;
-        target_pos[i] = p;
+    const float* ref_data = nullptr;
+    int ref_n = 0;
+    if (reference_positions.size() > 0) {
+        ref_data = reference_positions.ptr();
+        ref_n = reference_positions.size();
+    } else {
+        ref_data = raw_current_pos.data();
+        ref_n = raw_current_pos.size();
     }
 
-    int target_idx = 0;
+    if (ref_n == 0) return result;
+
+    result.resize(ref_n);
+    float* ptr = result.ptrw();
+
+    // handle wrap-around at the end of the lap for target
+    std::vector<float> target_pos(target_n);
+    float last_target_raw_p = raw_target_pos[0];
+    float target_p_offset = 0.0f;
+    for (int i = 0; i < target_n; ++i) {
+        float raw_p = raw_target_pos[i];
+        if (i > 0 && raw_p < last_target_raw_p - 0.5f) {
+            target_p_offset += 1.0f;
+        }
+        last_target_raw_p = raw_p;
+        target_pos[i] = raw_p + target_p_offset;
+    }
+
+    // handle wrap-around for current
+    std::vector<float> curr_pos(current_n);
     float last_curr_raw_p = raw_current_pos[0];
     float curr_p_offset = 0.0f;
-
-    for (int i = 0; i < num_points; ++i) {
+    for (int i = 0; i < current_n; ++i) {
         float raw_p = raw_current_pos[i];
-        
-        // unroll current position
         if (i > 0 && raw_p < last_curr_raw_p - 0.5f) {
             curr_p_offset += 1.0f;
         }
         last_curr_raw_p = raw_p;
-        float curr_p = raw_p + curr_p_offset;
+        curr_pos[i] = raw_p + curr_p_offset;
+    }
+
+    int target_idx = 0;
+    int curr_idx = 0;
+
+    float last_ref_raw_p = ref_data[0];
+    float ref_p_offset = 0.0f;
+
+    for (int i = 0; i < ref_n; ++i) {
+        float raw_p = ref_data[i];
         
-        
-        while (target_idx < target_n - 1 && target_pos[target_idx + 1] < curr_p) {
+        if (i > 0 && raw_p < last_ref_raw_p - 0.5f) {
+            ref_p_offset += 1.0f;
+        }
+        last_ref_raw_p = raw_p;
+        float ref_p = raw_p + ref_p_offset;
+
+        // interpolate target
+        while (target_idx < target_n - 1 && target_pos[target_idx + 1] < ref_p) {
             target_idx++;
         }
-        
+
         float t_time;
+        bool t_valid = true;
         if (target_idx >= target_n - 1) {
-            t_time = (float)target_time[target_n - 1];
-        } else if (curr_p <= target_pos[0]) {
-            t_time = (float)target_time[0];
+            if (ref_p > target_pos[target_n - 1]) {
+                t_valid = false;
+            } else {
+                t_time = (float)target_time[target_n - 1];
+            }
+        } else if (ref_p < target_pos[0]) {
+            t_valid = false;
         } else {
             float p1 = target_pos[target_idx];
             float p2 = target_pos[target_idx + 1];
@@ -720,14 +747,47 @@ PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path
             float t2 = (float)target_time[target_idx + 1];
             
             if (p2 - p1 > 0.000001f) {
-                float t = (curr_p - p1) / (p2 - p1);
+                float t = (ref_p - p1) / (p2 - p1);
                 t_time = t1 + t * (t2 - t1);
             } else {
                 t_time = t1;
             }
         }
+
+        // interpolate current
+        while (curr_idx < current_n - 1 && curr_pos[curr_idx + 1] < ref_p) {
+            curr_idx++;
+        }
+
+        float c_time;
+        bool c_valid = true;
+        if (curr_idx >= current_n - 1) {
+            if (ref_p > curr_pos[current_n - 1]) {
+                c_valid = false;
+            } else {
+                c_time = (float)current_time[current_n - 1];
+            }
+        } else if (ref_p < curr_pos[0]) {
+            c_valid = false;
+        } else {
+            float p1 = curr_pos[curr_idx];
+            float p2 = curr_pos[curr_idx + 1];
+            float t1 = (float)current_time[curr_idx];
+            float t2 = (float)current_time[curr_idx + 1];
+            
+            if (p2 - p1 > 0.000001f) {
+                float t = (ref_p - p1) / (p2 - p1);
+                c_time = t1 + t * (t2 - t1);
+            } else {
+                c_time = t1;
+            }
+        }
         
-        ptr[i] = (float)current_time[i] - t_time;
+        if (!t_valid || !c_valid) {
+            ptr[i] = std::numeric_limits<float>::quiet_NaN();
+        } else {
+            ptr[i] = c_time - t_time;
+        }
     }
 
     return result;
