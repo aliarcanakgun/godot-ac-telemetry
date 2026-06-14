@@ -77,6 +77,7 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_live_snapshot"), &ACTelemetry::get_live_snapshot);
 
     ClassDB::bind_method(D_METHOD("load_session_data", "file_path"), &ACTelemetry::load_session_data);
+    ClassDB::bind_method(D_METHOD("get_session_metadata", "file_path"), &ACTelemetry::get_session_metadata);
     ClassDB::bind_method(D_METHOD("close_loaded_session"), &ACTelemetry::close_loaded_session);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_count"), &ACTelemetry::get_loaded_session_lap_count);
     ClassDB::bind_method(D_METHOD("get_loaded_session_sample_interval"), &ACTelemetry::get_loaded_session_sample_interval);
@@ -358,29 +359,21 @@ String ACTelemetry::finish_logging(String output_file_path) {
     return os_path;
 }
 
-String ACTelemetry::load_session_data(String file_path) {
-    if (file_path.is_empty()) return String("File path is empty.");
+String ACTelemetry::_open_session_file(const String& file_path, std::ifstream& infile, SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets) {
+    if (file_path.is_empty()) return "file path is empty";
 
-    // clear previous data
-    loaded_session_data.clear();
-
-    // convert godot path to fs path
     String os_path = file_path;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }
 
-    // keep CharString in local var so get_data() pointer stays valid
     CharString cs = os_path.utf8();
     std::string path(cs.get_data(), cs.length());
-
     
-    std::ifstream infile(path, std::ios::binary);
-    if (!infile.is_open()) {
-        return String("Could not open file for reading: ") + os_path;
-    }
+    infile.open(path, std::ios::binary);
+    if (!infile.is_open()) return "could not open file: " + os_path;
 
-    // read & check signature
+    // check signature
     int sig_len = save_file_signature.utf8().length();
     std::vector<char> sig_buffer(sig_len);
     infile.read(sig_buffer.data(), sig_len);
@@ -388,61 +381,177 @@ String ACTelemetry::load_session_data(String file_path) {
     String read_sig = String::utf8(sig_buffer.data(), sig_len);
     if (read_sig != save_file_signature) {
         infile.close();
-        return String("Invalid file signature. Expected: " + save_file_signature + " but got: " + read_sig);
+        return "invalid signature";
     }
 
     // read static data
-    infile.read(reinterpret_cast<char*>(&loaded_session_static_data), sizeof(SPageStatic));
-    if (infile.fail()) {
-        infile.close();
-        return String("Failed to read static data");
+    if (infile.read(reinterpret_cast<char*>(&out_static), sizeof(SPageStatic)).fail()) {
+        infile.close(); return "failed reading static data";
     }
-
+    
     // read sample interval
-    infile.read(reinterpret_cast<char*>(&loaded_session_sample_interval), sizeof(double));
-    if (infile.fail()) {
-        infile.close();
-        return String("Failed to read sample interval");
+    if (infile.read(reinterpret_cast<char*>(&out_sample_interval), sizeof(double)).fail()) {
+        infile.close(); return "failed reading sample interval";
     }
-
+    
     // read samples per meter
-    infile.read(reinterpret_cast<char*>(&loaded_session_samples_per_meter), sizeof(double));
-    if (infile.fail()) {
-        infile.close();
-        return String("Failed to read samples per meter");
+    if (infile.read(reinterpret_cast<char*>(&out_samples_per_meter), sizeof(double)).fail()) {
+        infile.close(); return "failed reading samples per meter";
     }
 
     // read total laps count
-    loaded_session_lap_count = 0;
-    infile.read(reinterpret_cast<char*>(&loaded_session_lap_count), sizeof(uint64_t));
-    if (infile.fail()) {
-        infile.close();
-        return String("Failed to read total laps count");
+    if (infile.read(reinterpret_cast<char*>(&out_lap_count), sizeof(uint64_t)).fail()) {
+        infile.close(); return "failed reading lap count";
     }
-
+    
     // read lap offsets
-    loaded_session_lap_offsets.resize(loaded_session_lap_count);
-    if (loaded_session_lap_count > 0) {
-        infile.read(reinterpret_cast<char*>(loaded_session_lap_offsets.data()), loaded_session_lap_count * sizeof(uint64_t));
-        if (infile.fail()) {
-            infile.close();
-            return String("Failed to read lap offsets");
+    out_lap_offsets.resize(out_lap_count);
+    if (out_lap_count > 0) {
+        if (infile.read(reinterpret_cast<char*>(out_lap_offsets.data()), out_lap_count * sizeof(uint64_t)).fail()) {
+            infile.close(); return "failed reading lap offsets";
         }
     }
 
-    // read each lap data
+    return "";
+}
+
+String ACTelemetry::load_session_data(String file_path) {
+    loaded_session_data.clear();
+    loaded_session_lap_offsets.clear();
+
+    std::ifstream infile;
+    uint64_t count = 0;
+    String err = _open_session_file(file_path, infile, loaded_session_static_data, loaded_session_sample_interval, loaded_session_samples_per_meter, count, loaded_session_lap_offsets);
+    if (!err.is_empty()) return err;
+
+    loaded_session_lap_count = count;
+
     for (int i = 0; i < loaded_session_lap_count; ++i) {
         LapDataChannels lap_data;
+        infile.seekg(loaded_session_lap_offsets[i]);
         lap_data.read_from_stream(infile);
         if (infile.fail()) {
             infile.close();
-            return String("Failed to read snapshot data for lap " + String::num_int64(i));
+            return String("failed to read snapshot data for lap ") + String::num_int64(i);
         }
         loaded_session_data.push_back(lap_data);
     }
 
     infile.close();
-    return String("");
+    return "";
+}
+
+Dictionary ACTelemetry::get_session_metadata(String file_path) {
+    Dictionary meta;
+    std::ifstream infile;
+    SPageStatic stat;
+    double interval = 0, spm = 0;
+    uint64_t count = 0;
+    std::vector<uint64_t> offsets;
+
+    String err = _open_session_file(file_path, infile, stat, interval, spm, count, offsets);
+    if (!err.is_empty()) {
+        meta["error"] = err;
+        return meta;
+    }
+
+    meta["track_name"] = wchar_to_gdstring(stat.track, 33);
+    meta["track_config"] = wchar_to_gdstring(stat.trackConfiguration, 33);
+    meta["car_name"] = wchar_to_gdstring(stat.carModel, 33);
+    meta["total_laps"] = (int)count;
+
+    Array laps_arr;
+    int best_lap_time = 0;
+
+    for (uint64_t i = 0; i < count; i++) {
+        infile.seekg(offsets[i]);
+        LapDataChannels lap;
+        lap.read_metadata_from_stream(infile);
+
+        if (lap.speedKmh.empty()) continue;
+
+        Dictionary lap_stats;
+        int lap_time = 0;
+        Array sector_times;
+        float top_speed = 0.0f;
+        int current_sec_idx = lap.currentSectorIndex.empty() ? 0 : lap.currentSectorIndex[0];
+
+        for (size_t j = 0; j < lap.speedKmh.size(); j++) {
+            if (!lap.currentSectorIndex.empty() && lap.currentSectorIndex[j] != current_sec_idx) {
+                sector_times.push_back(lap.lastSectorTime[j]);
+                current_sec_idx = lap.currentSectorIndex[j];
+            }
+            if (lap.speedKmh[j] > top_speed) {
+                top_speed = lap.speedKmh[j];
+            }
+        }
+
+        bool is_completed = false;
+        if (lap.normalizedCarPosition.size() > 1) {
+            float total_progression = 0.0f;
+            for (size_t k = 1; k < lap.normalizedCarPosition.size(); k++) {
+                float diff = lap.normalizedCarPosition[k] - lap.normalizedCarPosition[k-1];
+                if (diff < -0.5f) diff += 1.0f;
+                if (diff > 0.5f) diff -= 1.0f;
+                
+                if (diff > 0.0f && diff < 0.1f) {
+                    total_progression += diff;
+                }
+            }
+            if (total_progression > 0.90f) {
+                is_completed = true;
+            }
+        }
+
+        // try getting exact time from next lap if exists
+        if (i + 1 < count) {
+            std::streampos curr_pos = infile.tellg();
+            infile.seekg(offsets[i + 1]);
+            LapDataChannels next_lap;
+            next_lap.read_metadata_from_stream(infile);
+            
+            if (!next_lap.iLastTime.empty()) {
+                lap_time = 0;
+                for (int t : next_lap.iLastTime) {
+                    if (t > lap_time) lap_time = t;
+                }
+            }
+            if (lap_time == 0 && !lap.iCurrentTime.empty()) {
+                lap_time = lap.iCurrentTime.back();
+            }
+
+            if (!next_lap.currentSectorIndex.empty() && !next_lap.lastSectorTime.empty()) {
+                for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
+                    if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
+                        sector_times.push_back(next_lap.lastSectorTime[k]);
+                        break;
+                    }
+                }
+            }
+            infile.seekg(curr_pos);
+        } else {
+            lap_time = lap.iCurrentTime.empty() ? 0 : lap.iCurrentTime.back();
+            is_completed = false;
+        }
+
+        lap_stats["lap_time_ms"] = lap_time;
+        lap_stats["sector_times_ms"] = sector_times;
+        lap_stats["top_speed_kmh"] = top_speed;
+        lap_stats["snapshot_count"] = (int)lap.speedKmh.size();
+        lap_stats["is_completed"] = is_completed;
+
+        laps_arr.push_back(lap_stats);
+
+        if (is_completed && lap_time > 0 && (best_lap_time == 0 || lap_time < best_lap_time)) {
+            best_lap_time = lap_time;
+        }
+    }
+
+
+    meta["best_lap_time"] = best_lap_time;
+    meta["laps"] = laps_arr;
+
+    return meta;
 }
 
 Dictionary ACTelemetry::get_live_static_data() {
@@ -505,22 +614,51 @@ Dictionary ACTelemetry::get_loaded_session_lap_stats(int lap_index) {
         }
     }
 
+    bool is_completed = false;
+    if (lap.normalizedCarPosition.size() > 1) {
+        float total_progression = 0.0f;
+        for (size_t k = 1; k < lap.normalizedCarPosition.size(); k++) {
+            float diff = lap.normalizedCarPosition[k] - lap.normalizedCarPosition[k-1];
+            if (diff < -0.5f) diff += 1.0f;
+            if (diff > 0.5f) diff -= 1.0f;
+            
+            if (diff > 0.0f && diff < 0.1f) {
+                total_progression += diff;
+            }
+        }
+        if (total_progression > 0.90f) {
+            is_completed = true;
+        }
+    }
+
     // try to get the exact lap_time and final sector time from the next lap
     if (lap_index + 1 < loaded_session_data.size() && !loaded_session_data[lap_index + 1].timestamp.empty()) {
         const auto &next_lap = loaded_session_data[lap_index + 1];
-        lap_time = next_lap.iLastTime[0];
         
-        if (next_lap.currentSectorIndex[0] == 0 && current_sec_idx != 0) {
-            sector_times.push_back(next_lap.lastSectorTime[0]);
+        lap_time = 0;
+        for (int t : next_lap.iLastTime) {
+            if (t > lap_time) lap_time = t;
+        }
+        if (lap_time == 0 && !lap.iCurrentTime.empty()) {
+            lap_time = lap.iCurrentTime.back();
+        }
+        
+        for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
+            if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
+                sector_times.push_back(next_lap.lastSectorTime[k]);
+                break;
+            }
         }
     } else {
-        lap_time = lap.iCurrentTime.back();
+        lap_time = lap.iCurrentTime.empty() ? 0 : lap.iCurrentTime.back();
+        is_completed = false;
     }
 
     stats["lap_time_ms"] = lap_time;
     stats["sector_times_ms"] = sector_times;
     stats["top_speed_kmh"] = top_speed;
     stats["snapshot_count"] = (int)lap.timestamp.size();
+    stats["is_completed"] = is_completed;
     
     return stats;
 }
@@ -622,30 +760,19 @@ PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path
     String actual_curr_path = current_file_path.is_empty() ? target_file_path : current_file_path;
 
     auto load_lap = [this](String file_path, int lap_index, LapDataChannels &out_lap) -> bool {
-        String os_path = file_path;
-        if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
-            os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+        std::ifstream infile;
+        SPageStatic stat;
+        double interval, spm;
+        uint64_t count;
+        std::vector<uint64_t> offsets;
+
+        if (!_open_session_file(file_path, infile, stat, interval, spm, count, offsets).is_empty()) {
+            return false;
         }
-        CharString cs = os_path.utf8();
-        std::string path(cs.get_data(), cs.length());
-        std::ifstream infile(path, std::ios::binary);
-        if (!infile.is_open()) return false;
 
-        int sig_len = save_file_signature.utf8().length();
-        std::vector<char> sig_buffer(sig_len);
-        infile.read(sig_buffer.data(), sig_len);
-        String read_sig = String::utf8(sig_buffer.data(), sig_len);
-        if (read_sig != save_file_signature) return false;
+        if (lap_index < 0 || lap_index >= count) return false;
 
-        infile.seekg(sizeof(SPageStatic) + sizeof(double) * 2, std::ios::cur);
-        uint64_t lap_count = 0;
-        infile.read(reinterpret_cast<char*>(&lap_count), sizeof(uint64_t));
-        if (lap_index < 0 || lap_index >= lap_count) return false;
-
-        std::vector<uint64_t> lap_offsets(lap_count);
-        infile.read(reinterpret_cast<char*>(lap_offsets.data()), lap_count * sizeof(uint64_t));
-
-        infile.seekg(lap_offsets[lap_index]);
+        infile.seekg(offsets[lap_index]);
         out_lap.read_from_stream(infile);
         return true;
     };

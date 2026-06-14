@@ -523,6 +523,76 @@ struct LapDataChannels {
         READ_CHAN(surfaceGrip); READ_CHAN(mandatoryPitDone); READ_CHAN(windSpeed); READ_CHAN(windDirection);
         #undef READ_CHAN
     }
+
+    void read_metadata_from_stream(std::istream& in) {
+        clear();
+        uint64_t lap_size = 0;
+        in.read(reinterpret_cast<char*>(&lap_size), sizeof(lap_size));
+        if (lap_size == 0) return;
+
+        #define READ_CHAN(vec) vec.resize(lap_size); in.read(reinterpret_cast<char*>(vec.data()), lap_size * sizeof(vec[0]))
+        #define SKIP_CHAN(vec) in.seekg(lap_size * sizeof(vec[0]), std::ios::cur)
+
+        SKIP_CHAN(timestamp); SKIP_CHAN(packetId_graphic); READ_CHAN(iCurrentTime); READ_CHAN(iLastTime); SKIP_CHAN(iBestTime); READ_CHAN(normalizedCarPosition); SKIP_CHAN(distanceTraveled);
+        SKIP_CHAN(replayTimeMultiplier); SKIP_CHAN(numberOfLaps); SKIP_CHAN(completedLaps);
+        SKIP_CHAN(currentTime); SKIP_CHAN(lastTime); SKIP_CHAN(bestTime); SKIP_CHAN(split); SKIP_CHAN(tyreCompound);
+        
+        SKIP_CHAN(packetId_physics); SKIP_CHAN(gas); SKIP_CHAN(brake); SKIP_CHAN(fuel); SKIP_CHAN(gear); SKIP_CHAN(rpms);
+        SKIP_CHAN(steerAngle); READ_CHAN(speedKmh); SKIP_CHAN(isAIControlled);
+        
+        SKIP_CHAN(velocity_x); SKIP_CHAN(velocity_y); SKIP_CHAN(velocity_z);
+        SKIP_CHAN(accG_x); SKIP_CHAN(accG_y); SKIP_CHAN(accG_z);
+        
+        SKIP_CHAN(wheelSlip_fl); SKIP_CHAN(wheelSlip_fr); SKIP_CHAN(wheelSlip_rl); SKIP_CHAN(wheelSlip_rr);
+        SKIP_CHAN(wheelLoad_fl); SKIP_CHAN(wheelLoad_fr); SKIP_CHAN(wheelLoad_rl); SKIP_CHAN(wheelLoad_rr);
+        SKIP_CHAN(wheelsPressure_fl); SKIP_CHAN(wheelsPressure_fr); SKIP_CHAN(wheelsPressure_rl); SKIP_CHAN(wheelsPressure_rr);
+        SKIP_CHAN(wheelAngularSpeed_fl); SKIP_CHAN(wheelAngularSpeed_fr); SKIP_CHAN(wheelAngularSpeed_rl); SKIP_CHAN(wheelAngularSpeed_rr);
+        SKIP_CHAN(tyreWear_fl); SKIP_CHAN(tyreWear_fr); SKIP_CHAN(tyreWear_rl); SKIP_CHAN(tyreWear_rr);
+        SKIP_CHAN(tyreDirtyLevel_fl); SKIP_CHAN(tyreDirtyLevel_fr); SKIP_CHAN(tyreDirtyLevel_rl); SKIP_CHAN(tyreDirtyLevel_rr);
+        SKIP_CHAN(tyreCoreTemperature_fl); SKIP_CHAN(tyreCoreTemperature_fr); SKIP_CHAN(tyreCoreTemperature_rl); SKIP_CHAN(tyreCoreTemperature_rr);
+        SKIP_CHAN(camberRAD_fl); SKIP_CHAN(camberRAD_fr); SKIP_CHAN(camberRAD_rl); SKIP_CHAN(camberRAD_rr);
+        SKIP_CHAN(suspensionTravel_fl); SKIP_CHAN(suspensionTravel_fr); SKIP_CHAN(suspensionTravel_rl); SKIP_CHAN(suspensionTravel_rr);
+        SKIP_CHAN(brakeTemp_fl); SKIP_CHAN(brakeTemp_fr); SKIP_CHAN(brakeTemp_rl); SKIP_CHAN(brakeTemp_rr);
+        SKIP_CHAN(tyreTempI_fl); SKIP_CHAN(tyreTempI_fr); SKIP_CHAN(tyreTempI_rl); SKIP_CHAN(tyreTempI_rr);
+        SKIP_CHAN(tyreTempM_fl); SKIP_CHAN(tyreTempM_fr); SKIP_CHAN(tyreTempM_rl); SKIP_CHAN(tyreTempM_rr);
+        SKIP_CHAN(tyreTempO_fl); SKIP_CHAN(tyreTempO_fr); SKIP_CHAN(tyreTempO_rl); SKIP_CHAN(tyreTempO_rr);
+        
+        SKIP_CHAN(tyreContactPoint_fl_x); SKIP_CHAN(tyreContactPoint_fl_y); SKIP_CHAN(tyreContactPoint_fl_z);
+        SKIP_CHAN(tyreContactPoint_fr_x); SKIP_CHAN(tyreContactPoint_fr_y); SKIP_CHAN(tyreContactPoint_fr_z);
+        SKIP_CHAN(tyreContactPoint_rl_x); SKIP_CHAN(tyreContactPoint_rl_y); SKIP_CHAN(tyreContactPoint_rl_z);
+        SKIP_CHAN(tyreContactPoint_rr_x); SKIP_CHAN(tyreContactPoint_rr_y); SKIP_CHAN(tyreContactPoint_rr_z);
+        
+        SKIP_CHAN(tyreContactNormal_fl_x); SKIP_CHAN(tyreContactNormal_fl_y); SKIP_CHAN(tyreContactNormal_fl_z);
+        SKIP_CHAN(tyreContactNormal_fr_x); SKIP_CHAN(tyreContactNormal_fr_y); SKIP_CHAN(tyreContactNormal_fr_z);
+        SKIP_CHAN(tyreContactNormal_rl_x); SKIP_CHAN(tyreContactNormal_rl_y); SKIP_CHAN(tyreContactNormal_rl_z);
+        SKIP_CHAN(tyreContactNormal_rr_x); SKIP_CHAN(tyreContactNormal_rr_y); SKIP_CHAN(tyreContactNormal_rr_z);
+        
+        SKIP_CHAN(tyreContactHeading_fl_x); SKIP_CHAN(tyreContactHeading_fl_y); SKIP_CHAN(tyreContactHeading_fl_z);
+        SKIP_CHAN(tyreContactHeading_fr_x); SKIP_CHAN(tyreContactHeading_fr_y); SKIP_CHAN(tyreContactHeading_fr_z);
+        SKIP_CHAN(tyreContactHeading_rl_x); SKIP_CHAN(tyreContactHeading_rl_y); SKIP_CHAN(tyreContactHeading_rl_z);
+        SKIP_CHAN(tyreContactHeading_rr_x); SKIP_CHAN(tyreContactHeading_rr_y); SKIP_CHAN(tyreContactHeading_rr_z);
+        
+        SKIP_CHAN(drs); SKIP_CHAN(tc); SKIP_CHAN(heading); SKIP_CHAN(pitch); SKIP_CHAN(roll); SKIP_CHAN(cgHeight);
+        SKIP_CHAN(pitLimiterOn); SKIP_CHAN(abs); SKIP_CHAN(kersCharge); SKIP_CHAN(kersInput); SKIP_CHAN(autoShifterOn);
+        SKIP_CHAN(rideHeight_f); SKIP_CHAN(rideHeight_r); SKIP_CHAN(turboBoost); SKIP_CHAN(ballast); SKIP_CHAN(airDensity);
+        SKIP_CHAN(airTemp); SKIP_CHAN(roadTemp);
+        SKIP_CHAN(localAngularVel_x); SKIP_CHAN(localAngularVel_y); SKIP_CHAN(localAngularVel_z);
+        SKIP_CHAN(finalFF); SKIP_CHAN(performanceMeter); SKIP_CHAN(engineBrake); SKIP_CHAN(ersRecoveryLevel);
+        SKIP_CHAN(ersPowerLevel); SKIP_CHAN(ersHeatCharging); SKIP_CHAN(ersIsCharging); SKIP_CHAN(kersCurrentKJ);
+        SKIP_CHAN(drsAvailable); SKIP_CHAN(drsEnabled); SKIP_CHAN(clutch); SKIP_CHAN(brakeBias);
+        SKIP_CHAN(localVelocity_x); SKIP_CHAN(localVelocity_y); SKIP_CHAN(localVelocity_z);
+        
+        SKIP_CHAN(carDamage_0); SKIP_CHAN(carDamage_1); SKIP_CHAN(carDamage_2); SKIP_CHAN(carDamage_3); SKIP_CHAN(carDamage_4);
+        SKIP_CHAN(numberOfTyresOut);
+        
+        SKIP_CHAN(status); SKIP_CHAN(session); SKIP_CHAN(position); SKIP_CHAN(sessionTimeLeft); SKIP_CHAN(isInPit);
+        READ_CHAN(currentSectorIndex); READ_CHAN(lastSectorTime);
+        SKIP_CHAN(carCoordinates_x); SKIP_CHAN(carCoordinates_y); SKIP_CHAN(carCoordinates_z);
+        SKIP_CHAN(penaltyTime); SKIP_CHAN(flag); SKIP_CHAN(idealLineOn); SKIP_CHAN(isInPitLane);
+        SKIP_CHAN(surfaceGrip); SKIP_CHAN(mandatoryPitDone); SKIP_CHAN(windSpeed); SKIP_CHAN(windDirection);
+        #undef READ_CHAN
+        #undef SKIP_CHAN
+    }
 };
 
 #pragma pack(pop)
