@@ -46,6 +46,53 @@ static PackedStringArray to_string_array(const std::vector<std::array<wchar_t, N
     return arr;
 }
 
+template<typename T>
+static PackedFloat32Array to_float_array_deg(const std::vector<T>& vec) {
+    PackedFloat32Array arr;
+    arr.resize(vec.size());
+    float* ptr = arr.ptrw();
+    for (size_t i = 0; i < vec.size(); ++i) {
+        ptr[i] = static_cast<float>(vec[i]) * 57.295779513f;
+    }
+    return arr;
+}
+
+static PackedFloat32Array calc_derivative(const std::vector<float>& values, const std::vector<int32_t>& time_ms) {
+    PackedFloat32Array arr;
+    if (values.empty() || time_ms.empty() || values.size() != time_ms.size()) return arr;
+    arr.resize(values.size());
+    float* ptr = arr.ptrw();
+    
+    // forward difference for the first point
+    if (values.size() > 1) {
+        float dt = (float)(time_ms[1] - time_ms[0]) / 1000.0f;
+        ptr[0] = (dt > 0.0001f) ? (values[1] - values[0]) / dt : 0.0f;
+    } else {
+        ptr[0] = 0.0f;
+    }
+
+    // central difference for the middle
+    for (size_t i = 1; i < values.size() - 1; ++i) {
+        float dt = (float)(time_ms[i + 1] - time_ms[i - 1]) / 1000.0f;
+        if (dt > 0.0001f) {
+            ptr[i] = (values[i + 1] - values[i - 1]) / dt;
+        } else {
+            ptr[i] = 0.0f;
+        }
+    }
+
+    // backward difference for the last point
+    size_t last = values.size() - 1;
+    if (last > 0) {
+        float dt = (float)(time_ms[last] - time_ms[last - 1]) / 1000.0f;
+        ptr[last] = (dt > 0.0001f) ? (values[last] - values[last - 1]) / dt : 0.0f;
+    } else if (last > 0) {
+        ptr[last] = 0.0f;
+    }
+    
+    return arr;
+}
+
 void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels.clear();
     
@@ -129,10 +176,20 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["camberRAD_rl"] = to_float_array(c.camberRAD_rl);
     cached_channels["camberRAD_rr"] = to_float_array(c.camberRAD_rr);
 
+    cached_channels["camberDEG_fl"] = to_float_array_deg(c.camberRAD_fl);
+    cached_channels["camberDEG_fr"] = to_float_array_deg(c.camberRAD_fr);
+    cached_channels["camberDEG_rl"] = to_float_array_deg(c.camberRAD_rl);
+    cached_channels["camberDEG_rr"] = to_float_array_deg(c.camberRAD_rr);
+
     cached_channels["suspensionTravel_fl"] = to_float_array(c.suspensionTravel_fl);
     cached_channels["suspensionTravel_fr"] = to_float_array(c.suspensionTravel_fr);
     cached_channels["suspensionTravel_rl"] = to_float_array(c.suspensionTravel_rl);
     cached_channels["suspensionTravel_rr"] = to_float_array(c.suspensionTravel_rr);
+
+    cached_channels["damperVelocity_fl"] = calc_derivative(c.suspensionTravel_fl, c.iCurrentTime);
+    cached_channels["damperVelocity_fr"] = calc_derivative(c.suspensionTravel_fr, c.iCurrentTime);
+    cached_channels["damperVelocity_rl"] = calc_derivative(c.suspensionTravel_rl, c.iCurrentTime);
+    cached_channels["damperVelocity_rr"] = calc_derivative(c.suspensionTravel_rr, c.iCurrentTime);
 
     cached_channels["brakeTemp_fl"] = to_float_array(c.brakeTemp_fl);
     cached_channels["brakeTemp_fr"] = to_float_array(c.brakeTemp_fr);

@@ -267,7 +267,16 @@ String ACTelemetry::finish_logging(String output_file_path) {
         logging_thread.join();
     }
 
-    if (sessions_data.empty()) return String("No telemetry data was recorded.");
+    // remove empty laps
+    for (auto it = sessions_data.begin(); it != sessions_data.end(); ) {
+        if (it->speedKmh.empty() || it->iCurrentTime.empty()) {
+            it = sessions_data.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    if (sessions_data.empty()) return String("No valid telemetry data was recorded.");
 
     // get output path
     String output = output_file_path;
@@ -431,9 +440,11 @@ String ACTelemetry::load_session_data(String file_path) {
         infile.seekg(loaded_session_lap_offsets[i]);
         lap_data.read_from_stream(infile);
         if (infile.fail()) {
-            infile.close();
             return String("failed to read snapshot data for lap ") + String::num_int64(i);
         }
+        
+        if (lap_data.speedKmh.empty()) continue;
+        
         loaded_session_data.push_back(lap_data);
     }
 
@@ -1011,16 +1022,50 @@ void ACTelemetry::logging_loop() {
                 last_i_current_time = dataGraphic->iCurrentTime;
                 
                 if (dataGraphic->completedLaps > last_lap_count) {
+                    lap_changed = true;
                     last_lap_count = dataGraphic->completedLaps;
                 }
 
+                // detect spatial lap crossing to avoid delayed lap timers
+                if (!sessions_data.empty() && !sessions_data.back().normalizedCarPosition.empty()) {
+                    float last_pos = sessions_data.back().normalizedCarPosition.back();
+                    if (last_pos > 0.8f && dataGraphic->normalizedCarPosition < 0.2f) {
+                        lap_changed = true;
+                    }
+                }
+
                 if (lap_changed || sessions_data.empty()) {
-                    sessions_data.push_back(LapDataChannels());
+                    bool should_push = true;
+                    if (!sessions_data.empty()) {
+                        auto& last_lap = sessions_data.back();
+                        if (last_lap.timestamp.size() < 10) {
+                            should_push = false;
+                        }
+                    }
+
+                    if (should_push) {
+                        sessions_data.push_back(LapDataChannels());
+                    } else {
+                        sessions_data.back().clear();
+                    }
                     last_recorded_meter = -INFINITY;
                 }
 
-                // calculate current position in meters
-                double current_meter = dataGraphic->normalizedCarPosition * dataStatic->trackSPlineLength;
+                // track continuous spline distance
+                double spline_pos = dataGraphic->normalizedCarPosition * dataStatic->trackSPlineLength;
+                double dist_diff = 0.0;
+                
+                if (last_recorded_meter >= 0.0) {
+                    dist_diff = spline_pos - last_recorded_meter;
+                    // fix distance jump when track spline loops
+                    if (dist_diff < -dataStatic->trackSPlineLength / 2.0) {
+                        dist_diff += dataStatic->trackSPlineLength;
+                    } else if (dist_diff > dataStatic->trackSPlineLength / 2.0) {
+                        dist_diff -= dataStatic->trackSPlineLength;
+                    }
+                }
+                
+                double current_meter = (last_recorded_meter < 0.0) ? spline_pos : (last_recorded_meter + dist_diff);
                 double distance_threshold = 1.0 / samples_per_meter;
 
                 // check if we moved enough to record a new sample
