@@ -445,6 +445,22 @@ String ACTelemetry::load_session_data(String file_path) {
         
         if (lap_data.speedKmh.empty()) continue;
         
+        // compatibility for old telemetry files (before commit 'e35eb69')
+        if (!lap_data.normalizedCarPosition.empty()) {
+            float base_offset = 0.0f;
+            float prev_pos = lap_data.normalizedCarPosition[0];
+            for (size_t j = 1; j < lap_data.normalizedCarPosition.size(); ++j) {
+                float curr_pos = lap_data.normalizedCarPosition[j];
+                if (curr_pos - prev_pos < -0.5f) {
+                    base_offset += 1.0f;
+                } else if (curr_pos - prev_pos > 0.5f) {
+                    base_offset -= 1.0f;
+                }
+                prev_pos = curr_pos;
+                lap_data.normalizedCarPosition[j] = curr_pos + base_offset;
+            }
+        }
+        
         loaded_session_data.push_back(lap_data);
     }
 
@@ -1030,6 +1046,11 @@ void ACTelemetry::logging_loop() {
                 if (!sessions_data.empty() && !sessions_data.back().normalizedCarPosition.empty()) {
                     float last_pos = sessions_data.back().normalizedCarPosition.back();
                     if (last_pos > 0.8f && dataGraphic->normalizedCarPosition < 0.2f) {
+                        lap_changed = true;
+                    }
+                    
+                    float jump = std::abs(dataGraphic->normalizedCarPosition - last_pos);
+                    if (jump > 0.1f && !(last_pos > 0.8f && dataGraphic->normalizedCarPosition < 0.2f)) {
                         lap_changed = true;
                     }
                 }

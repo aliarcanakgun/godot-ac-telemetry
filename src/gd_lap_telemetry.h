@@ -21,5 +21,6 @@ namespace godot {
         void fill_from_channels(const LapDataChannels &channels);
 
         Dictionary get_channels() const;
+        float get_channel_average(const StringName &p_channel) const;
     };
 }

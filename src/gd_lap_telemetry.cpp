@@ -10,6 +10,7 @@ GDLapTelemetry::~GDLapTelemetry() {}
 
 void GDLapTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_channels"), &GDLapTelemetry::get_channels);
+    ClassDB::bind_method(D_METHOD("get_channel_average", "channel_name"), &GDLapTelemetry::get_channel_average);
 }
 
 // helper functions to build arrays fast
@@ -35,6 +36,17 @@ static PackedInt32Array to_int_array(const std::vector<T>& vec) {
     return arr;
 }
 
+template<typename T>
+static PackedInt32Array to_int_array_offset(const std::vector<T>& vec, int offset) {
+    PackedInt32Array arr;
+    arr.resize(vec.size());
+    int32_t* ptr = arr.ptrw();
+    for (size_t i = 0; i < vec.size(); ++i) {
+        ptr[i] = static_cast<int32_t>(vec[i]) + offset;
+    }
+    return arr;
+}
+
 template<size_t N>
 static PackedStringArray to_string_array(const std::vector<std::array<wchar_t, N>>& vec) {
     PackedStringArray arr;
@@ -53,6 +65,17 @@ static PackedFloat32Array to_float_array_deg(const std::vector<T>& vec) {
     float* ptr = arr.ptrw();
     for (size_t i = 0; i < vec.size(); ++i) {
         ptr[i] = static_cast<float>(vec[i]) * 57.295779513f;
+    }
+    return arr;
+}
+
+template <typename T>
+static PackedFloat32Array to_float_array_pct(const std::vector<T>& vec) {
+    PackedFloat32Array arr;
+    arr.resize(vec.size());
+    float* ptr = arr.ptrw();
+    for (size_t i = 0; i < vec.size(); ++i) {
+        ptr[i] = static_cast<float>(vec[i]) * 100.0f;
     }
     return arr;
 }
@@ -117,10 +140,10 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
 
     // basics
     cached_channels["packetId_physics"] = to_int_array(c.packetId_physics);
-    cached_channels["gas"] = to_float_array(c.gas);
-    cached_channels["brake"] = to_float_array(c.brake);
+    cached_channels["gas"] = to_float_array_pct(c.gas);
+    cached_channels["brake"] = to_float_array_pct(c.brake);
     cached_channels["fuel"] = to_float_array(c.fuel);
-    cached_channels["gear"] = to_int_array(c.gear);
+    cached_channels["gear"] = to_int_array_offset(c.gear, -1);
     cached_channels["rpms"] = to_int_array(c.rpms);
     cached_channels["steerAngle"] = to_float_array(c.steerAngle);
     cached_channels["speedKmh"] = to_float_array(c.speedKmh);
@@ -255,15 +278,15 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
 
     // physics advanced
     cached_channels["drs"] = to_float_array(c.drs);
-    cached_channels["tc"] = to_float_array(c.tc);
-    cached_channels["heading"] = to_float_array(c.heading);
-    cached_channels["pitch"] = to_float_array(c.pitch);
-    cached_channels["roll"] = to_float_array(c.roll);
+    cached_channels["tc"] = to_float_array_pct(c.tc);
+    cached_channels["heading"] = to_float_array_deg(c.heading);
+    cached_channels["pitch"] = to_float_array_deg(c.pitch);
+    cached_channels["roll"] = to_float_array_deg(c.roll);
     cached_channels["cgHeight"] = to_float_array(c.cgHeight);
     cached_channels["pitLimiterOn"] = to_int_array(c.pitLimiterOn);
-    cached_channels["abs"] = to_float_array(c.abs);
-    cached_channels["kersCharge"] = to_float_array(c.kersCharge);
-    cached_channels["kersInput"] = to_float_array(c.kersInput);
+    cached_channels["abs"] = to_float_array_pct(c.abs);
+    cached_channels["kersCharge"] = to_float_array_pct(c.kersCharge);
+    cached_channels["kersInput"] = to_float_array_pct(c.kersInput);
     cached_channels["autoShifterOn"] = to_int_array(c.autoShifterOn);
     cached_channels["rideHeight_f"] = to_float_array(c.rideHeight_f);
     cached_channels["rideHeight_r"] = to_float_array(c.rideHeight_r);
@@ -272,9 +295,9 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["airDensity"] = to_float_array(c.airDensity);
     cached_channels["airTemp"] = to_float_array(c.airTemp);
     cached_channels["roadTemp"] = to_float_array(c.roadTemp);
-    cached_channels["localAngularVel_x"] = to_float_array(c.localAngularVel_x);
-    cached_channels["localAngularVel_y"] = to_float_array(c.localAngularVel_y);
-    cached_channels["localAngularVel_z"] = to_float_array(c.localAngularVel_z);
+    cached_channels["localAngularVel_x"] = to_float_array_deg(c.localAngularVel_x);
+    cached_channels["localAngularVel_y"] = to_float_array_deg(c.localAngularVel_y);
+    cached_channels["localAngularVel_z"] = to_float_array_deg(c.localAngularVel_z);
     cached_channels["finalFF"] = to_float_array(c.finalFF);
     cached_channels["performanceMeter"] = to_float_array(c.performanceMeter);
     cached_channels["engineBrake"] = to_int_array(c.engineBrake);
@@ -286,7 +309,7 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["drsAvailable"] = to_int_array(c.drsAvailable);
     cached_channels["drsEnabled"] = to_int_array(c.drsEnabled);
     cached_channels["clutch"] = to_float_array(c.clutch);
-    cached_channels["brakeBias"] = to_float_array(c.brakeBias);
+    cached_channels["brakeBias"] = to_float_array_pct(c.brakeBias);
     cached_channels["localVelocity_x"] = to_float_array(c.localVelocity_x);
     cached_channels["localVelocity_y"] = to_float_array(c.localVelocity_y);
     cached_channels["localVelocity_z"] = to_float_array(c.localVelocity_z);
@@ -321,4 +344,32 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
 
 Dictionary GDLapTelemetry::get_channels() const {
     return cached_channels;
+}
+
+float GDLapTelemetry::get_channel_average(const StringName &p_channel) const {
+    if (!cached_channels.has(p_channel)) return 0.0f;
+    Variant v = cached_channels[p_channel];
+    
+    if (v.get_type() == Variant::PACKED_FLOAT32_ARRAY) {
+        PackedFloat32Array arr = v;
+        if (arr.is_empty()) return 0.0f;
+        const float *ptr = arr.ptr();
+        double sum = 0.0;
+        for (int i = 0; i < arr.size(); ++i) {
+            sum += ptr[i];
+        }
+        return (float)(sum / arr.size());
+    } 
+    else if (v.get_type() == Variant::PACKED_INT32_ARRAY) {
+        PackedInt32Array arr = v;
+        if (arr.is_empty()) return 0.0f;
+        const int32_t *ptr = arr.ptr();
+        double sum = 0.0;
+        for (int i = 0; i < arr.size(); ++i) {
+            sum += ptr[i];
+        }
+        return (float)(sum / arr.size());
+    }
+    
+    return 0.0f;
 }
