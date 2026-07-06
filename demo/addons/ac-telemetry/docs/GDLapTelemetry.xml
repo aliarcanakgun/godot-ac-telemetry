@@ -1,0 +1,25 @@
+<class name="GDLapTelemetry" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+    <brief_description>
+        Container for lap telemetry data channels from Assetto Corsa.
+    </brief_description>
+    <description>
+        [GDLapTelemetry] represents the telemetry data recorded for a single lap or a live snapshot. Instead of discrete snapshots, data is organized into channels (arrays of values over time or distance), making it ideal for rendering graphs or calculating analytics in GDScript.
+    </description>
+    <tutorials>
+    </tutorials>
+    <methods>
+        <method name="get_channels" qualifiers="const">
+            <return type="Dictionary" />
+            <description>
+                Returns a dictionary containing all telemetry channels. Keys are channel names (e.g., "speedKmh", "normalizedCarPosition"), and values are arrays of recorded data points for that lap.
+            </description>
+        </method>
+        <method name="get_channel_average" qualifiers="const">
+            <return type="float" />
+            <param index="0" name="channel_name" type="StringName" />
+            <description>
+                Calculates and returns the average value of the specified telemetry channel over the entire lap. Returns 0.0 if the channel does not exist or is empty.
+            </description>
+        </method>
+    </methods>
+</class>

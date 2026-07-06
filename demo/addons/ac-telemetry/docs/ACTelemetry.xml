@@ -1,212 +1,221 @@
-<?xml version="1.0" encoding="UTF-8" ?>
 <class name="ACTelemetry" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
     <brief_description>
         Interface for Assetto Corsa telemetry data acquisition via shared memory.
     </brief_description>
     <description>
-        [ACTelemetry] manages real-time telemetry data from Assetto Corsa. It provides functionality to connect to the game, log telemetry snapshots during gameplay, and load previously recorded sessions.
-        
-        The class uses Windows shared memory to access physics, graphics, and static data from Assetto Corsa. Telemetry snapshots are collected at configurable intervals and can be saved to binary files for later analysis.
-        
-        [b]Note:[/b] This class is Windows-specific and requires Assetto Corsa to be running.
+        [ACTelemetry] manages real-time telemetry data from Assetto Corsa. It provides thread-safe background logging functionality to connect to the game, log telemetry channels based on time or distance, and load/analyze previously recorded sessions.
     </description>
     <tutorials>
     </tutorials>
     <methods>
-        <method name="connect_to_ac" qualifiers="const">
+        <method name="connect_to_ac">
             <return type="String" />
             <description>
-                Establishes a connection to Assetto Corsa via shared memory. Attempts to open file mappings for physics, graphics, and static data.
-                Returns an empty string on success, or an error message describing the failure if connection cannot be established.
+                Establishes a connection to Assetto Corsa via shared memory. Returns an empty string on success, or an error message on failure.
             </description>
         </method>
         <method name="disconnect_from_ac">
             <return type="void" />
             <description>
-                Closes all shared memory connections to Assetto Corsa and releases associated resources. Safe to call even if not connected.
+                Closes all shared memory connections to Assetto Corsa. Safe to call even if not connected.
             </description>
         </method>
         <method name="start_logging">
-            <return type="void" />
+            <return type="String" />
+            <param index="0" name="output_file_path" type="String" />
             <description>
-                Begins recording telemetry snapshots. Clears any previously recorded data and resets the session state.
+                Starts thread-safe background logging of telemetry data. Requires an [param output_file_path] as a fallback in case of unexpected disconnection. Returns an error string if it fails.
             </description>
         </method>
-        <method name="finish_logging" qualifiers="const">
+        <method name="finish_logging">
             <return type="String" />
-            <argument index="0" name="output_file_path" type="String" />
+            <param index="0" name="output_file_path" type="String" default="&quot;&quot;" />
             <description>
-                Stops logging and writes all recorded telemetry data to a binary file at the specified path.
-                Supports Godot path aliases ([code]res://[/code], [code]user://[/code]) which are automatically converted to filesystem paths.
-                Returns the filesystem path on success, or an error message if the operation fails.
+                Stops logging and saves the telemetry session to the specified file. If [param output_file_path] is empty, the path provided in [method start_logging] is used. Returns the output path on success, or an error string.
             </description>
         </method>
         <method name="get_live_static_data">
             <return type="Dictionary" />
             <description>
-                Returns a dictionary containing static track and car information from the current live session.
-                The dictionary includes car model, track name, player details, vehicle specifications, and session configuration.
-                Returns an empty dictionary if not actively logging.
+                Returns a dictionary with static information (track, car model, player name) for the live session.
+            </description>
+        </method>
+        <method name="get_live_snapshot">
+            <return type="GDLapTelemetry" />
+            <description>
+                Retrieves the most recent telemetry snapshot as a single-point [GDLapTelemetry] object. Useful for live dashboards.
             </description>
         </method>
         <method name="load_session_data">
             <return type="String" />
-            <argument index="0" name="file_path" type="String" />
+            <param index="0" name="file_path" type="String" />
             <description>
-                Loads telemetry data from a previously saved session file.
-                Supports Godot path aliases ([code]res://[/code], [code]user://[/code]) which are automatically converted to filesystem paths.
-                Returns an empty string on success, or an error message if the file cannot be read or is invalid.
+                Loads a previously saved telemetry session from [param file_path]. Returns an empty string on success, or an error message.
+            </description>
+        </method>
+        <method name="get_session_metadata">
+            <return type="Dictionary" />
+            <param index="0" name="file_path" type="String" />
+            <description>
+                Parses the metadata (lap counts, intervals, track info) of a session file without loading the entire telemetry data into memory.
             </description>
         </method>
         <method name="get_loaded_session_lap_data">
-            <return type="TypedArray[GDTelemetrySnapshot]" />
-            <argument index="0" name="lap_index" type="int" />
+            <return type="GDLapTelemetry" />
+            <param index="0" name="lap_index" type="int" />
             <description>
-                Returns an array of telemetry snapshots for the specified lap from a loaded session.
-                The [param lap_index] parameter is zero-indexed.
-                Returns an empty array if the lap index is out of bounds.
+                Returns a [GDLapTelemetry] object containing all channel data for the specified [param lap_index] (zero-indexed).
+            </description>
+        </method>
+        <method name="get_loaded_session_lap_stats">
+            <return type="Dictionary" />
+            <param index="0" name="lap_index" type="int" />
+            <description>
+                Returns key statistics for a given lap, such as top speed, minimum speed, and sector times.
             </description>
         </method>
         <method name="get_loaded_session_static_data">
             <return type="Dictionary" />
             <description>
-                Returns a dictionary containing the static data (track info, car specs) from the loaded session.
-                Returns an empty dictionary if no session has been loaded.
+                Returns the static data dictionary of the currently loaded session.
             </description>
         </method>
-        <method name="get_loaded_session_lap_count" qualifiers="const">
+        <method name="get_loaded_session_lap_count">
             <return type="int" />
             <description>
-                Returns the total number of laps in the loaded session.
+                Returns the total number of laps recorded in the loaded session.
             </description>
         </method>
-        <method name="get_loaded_session_sample_interval" qualifiers="const">
+        <method name="get_loaded_session_sample_interval">
             <return type="float" />
             <description>
-                Returns the sampling interval (in seconds) used when the session was recorded.
+                Returns the time-based sample interval used for the loaded session.
             </description>
         </method>
-        <method name="is_connected_to_ac" qualifiers="const">
-            <return type="bool" />
+        <method name="get_loaded_session_samples_per_meter">
+            <return type="float" />
             <description>
-                Returns [code]true[/code] if currently connected to Assetto Corsa via shared memory.
+                Returns the distance-based sampling rate used for the loaded session.
             </description>
         </method>
-        <method name="is_currently_logging" qualifiers="const">
-            <return type="bool" />
+        <method name="get_loaded_session_lap_fuel_consumption">
+            <return type="float" />
+            <param index="0" name="lap_index" type="int" />
             <description>
-                Returns [code]true[/code] if telemetry recording is currently active.
+                Calculates the total fuel consumed (in liters) during the specified lap.
+            </description>
+        </method>
+        <method name="get_loaded_session_total_fuel_consumption">
+            <return type="float" />
+            <description>
+                Calculates the total fuel consumed (in liters) across the entire loaded session.
+            </description>
+        </method>
+        <method name="get_loaded_session_total_laps">
+            <return type="float" />
+            <description>
+                Returns the exact float value of total laps completed (including fractional completion of the final lap).
             </description>
         </method>
         <method name="close_loaded_session">
             <return type="void" />
             <description>
-                Closes the currently loaded session data and releases associated resources. Safe to call even if no session is loaded.
+                Closes the loaded session and frees its memory.
+            </description>
+        </method>
+        <method name="calculate_lap_time_delta">
+            <return type="PackedFloat32Array" />
+            <param index="0" name="target_file_path" type="String" />
+            <param index="1" name="target_lap_index" type="int" default="0" />
+            <param index="2" name="current_file_path" type="String" default="&quot;&quot;" />
+            <param index="3" name="current_lap_index" type="int" default="0" />
+            <param index="4" name="reference_positions" type="PackedFloat32Array" default="PackedFloat32Array()" />
+            <description>
+                Calculates the time delta between a current lap and a target (reference) lap across distance. Returns an array of time differences.
+            </description>
+        </method>
+        <method name="is_connected_to_ac" qualifiers="const">
+            <return type="bool" />
+            <description>
+                Returns [code]true[/code] if actively connected to Assetto Corsa's shared memory.
+            </description>
+        </method>
+        <method name="is_currently_logging" qualifiers="const">
+            <return type="bool" />
+            <description>
+                Returns [code]true[/code] if the background logging thread is currently running.
             </description>
         </method>
     </methods>
     <members>
-        <member name="sample_interval" type="float" setter="set_sample_interval" getter="get_sample_interval" default="0.02"/>
-        <member name="save_file_signature" type="String" setter="set_save_file_signature" getter="get_save_file_signature" default="&quot;ACTL&quot;"/>
+        <member name="sample_interval" type="float" setter="set_sample_interval" getter="get_sample_interval" default="0.02">The time interval in seconds between telemetry samples. Only applicable if [member samples_per_meter] is 0 or less.</member>
+        <member name="samples_per_meter" type="float" setter="set_samples_per_meter" getter="get_samples_per_meter" default="1.0">The distance interval in meters between telemetry samples. Overrides [member sample_interval] if greater than 0. Highly recommended for accurate delta generation.</member>
+        <member name="save_file_signature" type="String" setter="set_save_file_signature" getter="get_save_file_signature" default="&quot;ACTL&quot;">A 4-character signature added to the beginning of the saved binary session file.</member>
     </members>
     <signals>
-        <signal name="connection_lost"/>
+        <signal name="connection_lost">
+            <description>
+                Emitted when the shared memory connection to Assetto Corsa is unexpectedly lost (e.g., game closed).
+            </description>
+        </signal>
     </signals>
     <constants>
         <constant name="STATUS_OFF" value="0" enum="ACStatusType">
-            <description>
-                Game is off.
-            </description>
+            <description>Game is off.</description>
         </constant>
         <constant name="STATUS_REPLAY" value="1" enum="ACStatusType">
-            <description>
-                Game is in replay mode.
-            </description>
+            <description>Game is in replay mode.</description>
         </constant>
         <constant name="STATUS_LIVE" value="2" enum="ACStatusType">
-            <description>
-                Game is running live.
-            </description>
+            <description>Game is running live.</description>
         </constant>
         <constant name="STATUS_PAUSE" value="3" enum="ACStatusType">
-            <description>
-                Game is paused.
-            </description>
+            <description>Game is paused.</description>
         </constant>
         <constant name="SESSION_UNKNOWN" value="-1" enum="ACSessionType">
-            <description>
-                Session type is unknown.
-            </description>
+            <description>Unknown session type.</description>
         </constant>
         <constant name="SESSION_PRACTICE" value="0" enum="ACSessionType">
-            <description>
-                Practice session.
-            </description>
+            <description>Practice session.</description>
         </constant>
         <constant name="SESSION_QUALIFY" value="1" enum="ACSessionType">
-            <description>
-                Qualifying session.
-            </description>
+            <description>Qualifying session.</description>
         </constant>
         <constant name="SESSION_RACE" value="2" enum="ACSessionType">
-            <description>
-                Race session.
-            </description>
+            <description>Race session.</description>
         </constant>
         <constant name="SESSION_HOTLAP" value="3" enum="ACSessionType">
-            <description>
-                Hotlap session.
-            </description>
+            <description>Hotlap session.</description>
         </constant>
         <constant name="SESSION_TIME_ATTACK" value="4" enum="ACSessionType">
-            <description>
-                Time attack session.
-            </description>
+            <description>Time attack session.</description>
         </constant>
         <constant name="SESSION_DRIFT" value="5" enum="ACSessionType">
-            <description>
-                Drift session.
-            </description>
+            <description>Drift session.</description>
         </constant>
         <constant name="SESSION_DRAG" value="6" enum="ACSessionType">
-            <description>
-                Drag race session.
-            </description>
+            <description>Drag race session.</description>
         </constant>
         <constant name="FLAG_NONE" value="0" enum="ACFlagType">
-            <description>
-                No flag.
-            </description>
+            <description>No flag.</description>
         </constant>
         <constant name="FLAG_BLUE" value="1" enum="ACFlagType">
-            <description>
-                Blue flag.
-            </description>
+            <description>Blue flag.</description>
         </constant>
         <constant name="FLAG_YELLOW" value="2" enum="ACFlagType">
-            <description>
-                Yellow flag.
-            </description>
+            <description>Yellow flag.</description>
         </constant>
         <constant name="FLAG_BLACK" value="3" enum="ACFlagType">
-            <description>
-                Black flag.
-            </description>
+            <description>Black flag.</description>
         </constant>
         <constant name="FLAG_WHITE" value="4" enum="ACFlagType">
-            <description>
-                White flag.
-            </description>
+            <description>White flag.</description>
         </constant>
         <constant name="FLAG_CHECKERED" value="5" enum="ACFlagType">
-            <description>
-                Checkered flag.
-            </description>
+            <description>Checkered flag.</description>
         </constant>
         <constant name="FLAG_PENALTY" value="6" enum="ACFlagType">
-            <description>
-                Penalty flag.
-            </description>
+            <description>Penalty flag.</description>
         </constant>
     </constants>
 </class>
