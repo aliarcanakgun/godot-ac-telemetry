@@ -7,6 +7,7 @@
 *.pyc
 
 # Compiled Binaries
+src/gen/doc_data.gen.cpp
 demo/addons/ac-telemetry/bin/*
 !demo/addons/ac-telemetry/bin/*.gdextension
 
