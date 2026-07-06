@@ -530,6 +530,7 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
             }
         }
 
+        int next_lap_best_time = 0;
         // try getting exact time from next lap if exists
         if (i + 1 < count) {
             std::streampos curr_pos = infile.tellg();
@@ -537,6 +538,10 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
             LapDataChannels next_lap;
             next_lap.read_metadata_from_stream(infile);
             
+            if (!next_lap.iBestTime.empty()) {
+                next_lap_best_time = next_lap.iBestTime[0];
+            }
+
             if (!next_lap.iLastTime.empty()) {
                 lap_time = 0;
                 for (int t : next_lap.iLastTime) {
@@ -561,15 +566,32 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
             is_completed = false;
         }
 
+        bool is_valid = is_completed;
+        if (is_valid) {
+            for (size_t k = 0; k < lap.numberOfTyresOut.size(); k++) {
+                if (lap.numberOfTyresOut[k] >= 4 || lap.penaltyTime[k] > 0.0f || lap.flag[k] == AC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
+                    is_valid = false;
+                    break;
+                }
+            }
+            // check if it's best. if it is, next lap's best time will be this lap's time
+            if (is_valid && !lap.iBestTime.empty() && lap.iBestTime[0] > 0 && lap_time > 0 && lap_time < lap.iBestTime[0]) {
+                if (next_lap_best_time > 0 && next_lap_best_time != lap_time) {
+                    is_valid = false;
+                }
+            }
+        }
+
         lap_stats["lap_time_ms"] = lap_time;
         lap_stats["sector_times_ms"] = sector_times;
         lap_stats["top_speed_kmh"] = top_speed;
         lap_stats["snapshot_count"] = (int)lap.speedKmh.size();
         lap_stats["is_completed"] = is_completed;
+        lap_stats["is_valid"] = is_valid;
 
         laps_arr.push_back(lap_stats);
 
-        if (is_completed && lap_time > 0 && (best_lap_time == 0 || lap_time < best_lap_time)) {
+        if (is_valid && lap_time > 0 && (best_lap_time == 0 || lap_time < best_lap_time)) {
             best_lap_time = lap_time;
         }
     }

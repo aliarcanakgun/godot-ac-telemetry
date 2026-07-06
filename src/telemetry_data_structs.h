@@ -533,7 +533,7 @@ struct LapDataChannels {
         #define READ_CHAN(vec) vec.resize(lap_size); in.read(reinterpret_cast<char*>(vec.data()), lap_size * sizeof(vec[0]))
         #define SKIP_CHAN(vec) in.seekg(lap_size * sizeof(vec[0]), std::ios::cur)
 
-        SKIP_CHAN(timestamp); SKIP_CHAN(packetId_graphic); READ_CHAN(iCurrentTime); READ_CHAN(iLastTime); SKIP_CHAN(iBestTime); READ_CHAN(normalizedCarPosition); SKIP_CHAN(distanceTraveled);
+        SKIP_CHAN(timestamp); SKIP_CHAN(packetId_graphic); READ_CHAN(iCurrentTime); READ_CHAN(iLastTime); READ_CHAN(iBestTime); READ_CHAN(normalizedCarPosition); SKIP_CHAN(distanceTraveled);
         SKIP_CHAN(replayTimeMultiplier); SKIP_CHAN(numberOfLaps); SKIP_CHAN(completedLaps);
         SKIP_CHAN(currentTime); SKIP_CHAN(lastTime); SKIP_CHAN(bestTime); SKIP_CHAN(split); SKIP_CHAN(tyreCompound);
         
@@ -583,12 +583,12 @@ struct LapDataChannels {
         SKIP_CHAN(localVelocity_x); SKIP_CHAN(localVelocity_y); SKIP_CHAN(localVelocity_z);
         
         SKIP_CHAN(carDamage_0); SKIP_CHAN(carDamage_1); SKIP_CHAN(carDamage_2); SKIP_CHAN(carDamage_3); SKIP_CHAN(carDamage_4);
-        SKIP_CHAN(numberOfTyresOut);
+        READ_CHAN(numberOfTyresOut);
         
         SKIP_CHAN(status); SKIP_CHAN(session); SKIP_CHAN(position); SKIP_CHAN(sessionTimeLeft); SKIP_CHAN(isInPit);
         READ_CHAN(currentSectorIndex); READ_CHAN(lastSectorTime);
         SKIP_CHAN(carCoordinates_x); SKIP_CHAN(carCoordinates_y); SKIP_CHAN(carCoordinates_z);
-        SKIP_CHAN(penaltyTime); SKIP_CHAN(flag); SKIP_CHAN(idealLineOn); SKIP_CHAN(isInPitLane);
+        READ_CHAN(penaltyTime); READ_CHAN(flag); SKIP_CHAN(idealLineOn); READ_CHAN(isInPitLane);
         SKIP_CHAN(surfaceGrip); SKIP_CHAN(mandatoryPitDone); SKIP_CHAN(windSpeed); SKIP_CHAN(windDirection);
         #undef READ_CHAN
         #undef SKIP_CHAN
