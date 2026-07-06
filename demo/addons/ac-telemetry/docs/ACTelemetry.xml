@@ -160,62 +160,24 @@
         </signal>
     </signals>
     <constants>
-        <constant name="STATUS_OFF" value="0" enum="ACStatusType">
-            <description>Game is off.</description>
-        </constant>
-        <constant name="STATUS_REPLAY" value="1" enum="ACStatusType">
-            <description>Game is in replay mode.</description>
-        </constant>
-        <constant name="STATUS_LIVE" value="2" enum="ACStatusType">
-            <description>Game is running live.</description>
-        </constant>
-        <constant name="STATUS_PAUSE" value="3" enum="ACStatusType">
-            <description>Game is paused.</description>
-        </constant>
-        <constant name="SESSION_UNKNOWN" value="-1" enum="ACSessionType">
-            <description>Unknown session type.</description>
-        </constant>
-        <constant name="SESSION_PRACTICE" value="0" enum="ACSessionType">
-            <description>Practice session.</description>
-        </constant>
-        <constant name="SESSION_QUALIFY" value="1" enum="ACSessionType">
-            <description>Qualifying session.</description>
-        </constant>
-        <constant name="SESSION_RACE" value="2" enum="ACSessionType">
-            <description>Race session.</description>
-        </constant>
-        <constant name="SESSION_HOTLAP" value="3" enum="ACSessionType">
-            <description>Hotlap session.</description>
-        </constant>
-        <constant name="SESSION_TIME_ATTACK" value="4" enum="ACSessionType">
-            <description>Time attack session.</description>
-        </constant>
-        <constant name="SESSION_DRIFT" value="5" enum="ACSessionType">
-            <description>Drift session.</description>
-        </constant>
-        <constant name="SESSION_DRAG" value="6" enum="ACSessionType">
-            <description>Drag race session.</description>
-        </constant>
-        <constant name="FLAG_NONE" value="0" enum="ACFlagType">
-            <description>No flag.</description>
-        </constant>
-        <constant name="FLAG_BLUE" value="1" enum="ACFlagType">
-            <description>Blue flag.</description>
-        </constant>
-        <constant name="FLAG_YELLOW" value="2" enum="ACFlagType">
-            <description>Yellow flag.</description>
-        </constant>
-        <constant name="FLAG_BLACK" value="3" enum="ACFlagType">
-            <description>Black flag.</description>
-        </constant>
-        <constant name="FLAG_WHITE" value="4" enum="ACFlagType">
-            <description>White flag.</description>
-        </constant>
-        <constant name="FLAG_CHECKERED" value="5" enum="ACFlagType">
-            <description>Checkered flag.</description>
-        </constant>
-        <constant name="FLAG_PENALTY" value="6" enum="ACFlagType">
-            <description>Penalty flag.</description>
-        </constant>
+        <constant name="STATUS_OFF" value="0" enum="ACStatusType">Game is off.</constant>
+        <constant name="STATUS_REPLAY" value="1" enum="ACStatusType">Game is in replay mode.</constant>
+        <constant name="STATUS_LIVE" value="2" enum="ACStatusType">Game is running live.</constant>
+        <constant name="STATUS_PAUSE" value="3" enum="ACStatusType">Game is paused.</constant>
+        <constant name="SESSION_UNKNOWN" value="-1" enum="ACSessionType">Unknown session type.</constant>
+        <constant name="SESSION_PRACTICE" value="0" enum="ACSessionType">Practice session.</constant>
+        <constant name="SESSION_QUALIFY" value="1" enum="ACSessionType">Qualifying session.</constant>
+        <constant name="SESSION_RACE" value="2" enum="ACSessionType">Race session.</constant>
+        <constant name="SESSION_HOTLAP" value="3" enum="ACSessionType">Hotlap session.</constant>
+        <constant name="SESSION_TIME_ATTACK" value="4" enum="ACSessionType">Time attack session.</constant>
+        <constant name="SESSION_DRIFT" value="5" enum="ACSessionType">Drift session.</constant>
+        <constant name="SESSION_DRAG" value="6" enum="ACSessionType">Drag race session.</constant>
+        <constant name="FLAG_NONE" value="0" enum="ACFlagType">No flag.</constant>
+        <constant name="FLAG_BLUE" value="1" enum="ACFlagType">Blue flag.</constant>
+        <constant name="FLAG_YELLOW" value="2" enum="ACFlagType">Yellow flag.</constant>
+        <constant name="FLAG_BLACK" value="3" enum="ACFlagType">Black flag.</constant>
+        <constant name="FLAG_WHITE" value="4" enum="ACFlagType">White flag.</constant>
+        <constant name="FLAG_CHECKERED" value="5" enum="ACFlagType">Checkered flag.</constant>
+        <constant name="FLAG_PENALTY" value="6" enum="ACFlagType">Penalty flag.</constant>
     </constants>
 </class>
