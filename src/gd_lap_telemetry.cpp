@@ -80,6 +80,17 @@ static PackedFloat32Array to_float_array_pct(const std::vector<T>& vec) {
     return arr;
 }
 
+template <typename T>
+static PackedFloat32Array to_float_array_mm(const std::vector<T>& vec) {
+    PackedFloat32Array arr;
+    arr.resize(vec.size());
+    float* ptr = arr.ptrw();
+    for (size_t i = 0; i < vec.size(); ++i) {
+        ptr[i] = static_cast<float>(vec[i]) * 1000.0f;
+    }
+    return arr;
+}
+
 static PackedFloat32Array calc_derivative(const std::vector<float>& values, const std::vector<int32_t>& time_ms) {
     PackedFloat32Array arr;
     if (values.empty() || time_ms.empty() || values.size() != time_ms.size()) return arr;
@@ -204,10 +215,10 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["camberDEG_rl"] = to_float_array_deg(c.camberRAD_rl);
     cached_channels["camberDEG_rr"] = to_float_array_deg(c.camberRAD_rr);
 
-    cached_channels["suspensionTravel_fl"] = to_float_array(c.suspensionTravel_fl);
-    cached_channels["suspensionTravel_fr"] = to_float_array(c.suspensionTravel_fr);
-    cached_channels["suspensionTravel_rl"] = to_float_array(c.suspensionTravel_rl);
-    cached_channels["suspensionTravel_rr"] = to_float_array(c.suspensionTravel_rr);
+    cached_channels["suspensionTravel_fl"] = to_float_array_mm(c.suspensionTravel_fl);
+    cached_channels["suspensionTravel_fr"] = to_float_array_mm(c.suspensionTravel_fr);
+    cached_channels["suspensionTravel_rl"] = to_float_array_mm(c.suspensionTravel_rl);
+    cached_channels["suspensionTravel_rr"] = to_float_array_mm(c.suspensionTravel_rr);
 
     cached_channels["damperVelocity_fl"] = calc_derivative(c.suspensionTravel_fl, c.iCurrentTime);
     cached_channels["damperVelocity_fr"] = calc_derivative(c.suspensionTravel_fr, c.iCurrentTime);
@@ -282,14 +293,14 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["heading"] = to_float_array_deg(c.heading);
     cached_channels["pitch"] = to_float_array_deg(c.pitch);
     cached_channels["roll"] = to_float_array_deg(c.roll);
-    cached_channels["cgHeight"] = to_float_array(c.cgHeight);
+    cached_channels["cgHeight"] = to_float_array_mm(c.cgHeight);
     cached_channels["pitLimiterOn"] = to_int_array(c.pitLimiterOn);
     cached_channels["abs"] = to_float_array_pct(c.abs);
     cached_channels["kersCharge"] = to_float_array_pct(c.kersCharge);
     cached_channels["kersInput"] = to_float_array_pct(c.kersInput);
     cached_channels["autoShifterOn"] = to_int_array(c.autoShifterOn);
-    cached_channels["rideHeight_f"] = to_float_array(c.rideHeight_f);
-    cached_channels["rideHeight_r"] = to_float_array(c.rideHeight_r);
+    cached_channels["rideHeight_f"] = to_float_array_mm(c.rideHeight_f);
+    cached_channels["rideHeight_r"] = to_float_array_mm(c.rideHeight_r);
     cached_channels["turboBoost"] = to_float_array(c.turboBoost);
     cached_channels["ballast"] = to_float_array(c.ballast);
     cached_channels["airDensity"] = to_float_array(c.airDensity);
