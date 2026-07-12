@@ -1113,17 +1113,57 @@ void ACTelemetry::logging_loop() {
 
                 // check if we moved enough to record a new sample
                 if (last_recorded_meter < 0.0 || std::abs(current_meter - last_recorded_meter) >= distance_threshold) {
-                    last_recorded_meter = current_meter;
+                    double old_last_recorded_meter = last_recorded_meter;
+                    double direction = 1.0;
+                    
+                    if (last_recorded_meter < 0.0) {
+                        last_recorded_meter = current_meter;
+                    } else {
+                        direction = (current_meter > last_recorded_meter) ? 1.0 : -1.0;
+                        last_recorded_meter += distance_threshold * direction;
+                        
+                        if (dataStatic->trackSPlineLength > 0.0) {
+                            if (last_recorded_meter >= dataStatic->trackSPlineLength) {
+                                last_recorded_meter -= dataStatic->trackSPlineLength;
+                            } else if (last_recorded_meter < 0.0) {
+                                last_recorded_meter += dataStatic->trackSPlineLength;
+                            }
+                        }
+                    }
+                    
                     auto& lap = sessions_data.back();
 
+                    // IMPORTANT: even the physics is 333hz, graphic is 60hz.
+                    // to get accurate data, we need to interpolate the new time and dist.
+                    // physics data will always be updated before graphic data
+                    // so we use the physics data to interpolate the some of the graphic data
+                    double smoothed_timestamp = dataGraphic->iCurrentTime / 1000.0;
+                    int32_t smoothed_iCurrentTime = dataGraphic->iCurrentTime;
+                    double smoothed_normalizedCarPosition = dataGraphic->normalizedCarPosition;
+                    float smoothed_distanceTraveled = dataGraphic->distanceTraveled;
+
+                    if (dataStatic->trackSPlineLength > 0.0) {
+                        smoothed_normalizedCarPosition = last_recorded_meter / dataStatic->trackSPlineLength;
+                    }
+
+                    if (!lap.timestamp.empty() && old_last_recorded_meter >= 0.0) {
+                        int packet_diff = dataPhysics->packetId - lap.packetId_physics.back();
+                        if (packet_diff > 0 && packet_diff < 1000) {
+                            double dt = packet_diff * (1.0 / 333.333333333); // ac physics is 333hz
+                            smoothed_timestamp = lap.timestamp.back() + dt;
+                            smoothed_iCurrentTime = lap.iCurrentTime.back() + static_cast<int32_t>(dt * 1000.0);
+                        }
+                        smoothed_distanceTraveled = lap.distanceTraveled.back() + distance_threshold * direction;
+                    }
+
                     // graphic basics
-                    lap.timestamp.push_back(dataGraphic->iCurrentTime / 1000.0);
+                    lap.timestamp.push_back(smoothed_timestamp);
                     lap.packetId_graphic.push_back(dataGraphic->packetId);
-                    lap.iCurrentTime.push_back(dataGraphic->iCurrentTime);
+                    lap.iCurrentTime.push_back(smoothed_iCurrentTime);
                     lap.iLastTime.push_back(dataGraphic->iLastTime);
                     lap.iBestTime.push_back(dataGraphic->iBestTime);
-                    lap.normalizedCarPosition.push_back(dataGraphic->normalizedCarPosition);
-                    lap.distanceTraveled.push_back(dataGraphic->distanceTraveled);
+                    lap.normalizedCarPosition.push_back(smoothed_normalizedCarPosition);
+                    lap.distanceTraveled.push_back(smoothed_distanceTraveled);
                     lap.replayTimeMultiplier.push_back(dataGraphic->replayTimeMultiplier);
                     lap.numberOfLaps.push_back(dataGraphic->numberOfLaps);
                     lap.completedLaps.push_back(dataGraphic->completedLaps);
