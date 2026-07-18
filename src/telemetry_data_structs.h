@@ -5,6 +5,7 @@
 #include <ostream>
 #include <istream>
 #include <array>
+#include <cstdint>
 
 // assetto corsa status and types
 typedef int AC_STATUS;

@@ -49,6 +49,7 @@ namespace godot {
         int last_i_current_time = 0;
         bool is_connected = false;
         std::atomic<bool> is_logging{false};
+        std::atomic<bool> game_disconnected{false};
 
         std::thread logging_thread;
         std::mutex data_mutex;
@@ -67,17 +68,18 @@ namespace godot {
 
         void _process(double delta) override;
         
-        bool is_connected_to_ac() const; // getter
-        bool is_currently_logging() const; // getter
+        bool is_connected_to_ac() const;
+        bool is_currently_logging() const;
+        int get_ac_status();
 
-        String get_save_file_signature() const; // getter
-        void set_save_file_signature(String p_signature); // setter
+        String get_save_file_signature() const;
+        void set_save_file_signature(String p_signature);
 
-        double get_sample_interval() const; // getter
-        void set_sample_interval(double p_sample_interval); // setter
+        double get_sample_interval() const;
+        void set_sample_interval(double p_sample_interval);
 
-        double get_samples_per_meter() const; // getter
-        void set_samples_per_meter(double p_samples_per_meter); // setter
+        double get_samples_per_meter() const;
+        void set_samples_per_meter(double p_samples_per_meter);
 
         String connect_to_ac();
         void disconnect_from_ac();

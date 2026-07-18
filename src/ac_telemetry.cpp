@@ -95,6 +95,7 @@ void ACTelemetry::_bind_methods() {
     // getters/setters
     ClassDB::bind_method(D_METHOD("is_connected_to_ac"), &ACTelemetry::is_connected_to_ac);   
     ClassDB::bind_method(D_METHOD("is_currently_logging"), &ACTelemetry::is_currently_logging);
+    ClassDB::bind_method(D_METHOD("get_ac_status"), &ACTelemetry::get_ac_status);
 
     ClassDB::bind_method(D_METHOD("get_sample_interval"), &ACTelemetry::get_sample_interval);
     ClassDB::bind_method(D_METHOD("set_sample_interval"), &ACTelemetry::set_sample_interval);
@@ -113,8 +114,12 @@ void ACTelemetry::_bind_methods() {
 }
 
 bool ACTelemetry::is_connected_to_ac() const { return is_connected; }
-
 bool ACTelemetry::is_currently_logging() const { return is_logging; }
+
+int ACTelemetry::get_ac_status() {
+    if (!is_connected || !dataGraphic) return 0; // AC_OFF
+    return dataGraphic->status;
+}
 
 double ACTelemetry::get_sample_interval() const { return sample_interval; }
 void ACTelemetry::set_sample_interval(double p_sample_interval) {
@@ -231,6 +236,16 @@ void ACTelemetry::disconnect_from_ac() {
 }
 
 void ACTelemetry::_process(double delta) {
+    if (game_disconnected.load()) {
+        game_disconnected.store(false);
+        if (is_connected) { // connection lost
+            finish_logging(session_output_file_path);
+            is_connected = false;
+            emit_signal("connection_lost");
+        }
+        return;
+    }
+
     if (!dataPhysics || !dataGraphic) {
         if (is_connected) { // connection lost
             is_connected = false;
@@ -251,6 +266,7 @@ String ACTelemetry::start_logging(String output_file_path) {
     last_physics_packet_id = -1;
     last_i_current_time = 0;
     last_recorded_meter = -1.0;
+    game_disconnected.store(false);
     is_logging = true;
 
     logging_thread = std::thread(&ACTelemetry::logging_loop, this);
@@ -267,9 +283,9 @@ String ACTelemetry::finish_logging(String output_file_path) {
         logging_thread.join();
     }
 
-    // remove empty laps
+    // remove empty/junk laps
     for (auto it = sessions_data.begin(); it != sessions_data.end(); ) {
-        if (it->speedKmh.empty() || it->iCurrentTime.empty()) {
+        if (it->speedKmh.empty() || it->iCurrentTime.empty() || it->timestamp.size() < 10) {
             it = sessions_data.erase(it);
         } else {
             ++it;
@@ -486,6 +502,7 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
     meta["track_config"] = wchar_to_gdstring(stat.trackConfiguration, 33);
     meta["car_name"] = wchar_to_gdstring(stat.carModel, 33);
     meta["total_laps"] = (int)count;
+    meta["sector_count"] = stat.sectorCount;
 
     Array laps_arr;
     int best_lap_time = 0;
@@ -499,13 +516,15 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
 
         Dictionary lap_stats;
         int lap_time = 0;
-        Array sector_times;
+        Dictionary sector_times;
         float top_speed = 0.0f;
         int current_sec_idx = lap.currentSectorIndex.empty() ? 0 : lap.currentSectorIndex[0];
 
         for (size_t j = 0; j < lap.speedKmh.size(); j++) {
             if (!lap.currentSectorIndex.empty() && lap.currentSectorIndex[j] != current_sec_idx) {
-                sector_times.push_back(lap.lastSectorTime[j]);
+                if (lap.lastSectorTime[j] > 0 && lap.lastSectorTime[j] <= lap.iCurrentTime[j] + 2000) {
+                    sector_times[current_sec_idx] = lap.lastSectorTime[j];
+                }
                 current_sec_idx = lap.currentSectorIndex[j];
             }
             if (lap.speedKmh[j] > top_speed) {
@@ -552,10 +571,10 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
                 lap_time = lap.iCurrentTime.back();
             }
 
-            if (!next_lap.currentSectorIndex.empty() && !next_lap.lastSectorTime.empty()) {
+            if (is_completed && !next_lap.currentSectorIndex.empty() && !next_lap.lastSectorTime.empty()) {
                 for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
                     if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
-                        sector_times.push_back(next_lap.lastSectorTime[k]);
+                        sector_times[current_sec_idx] = next_lap.lastSectorTime[k];
                         break;
                     }
                 }
@@ -596,15 +615,32 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
         }
     }
 
+    Dictionary best_sectors_dict;
+    for (int i = 0; i < laps_arr.size(); i++) {
+        Dictionary lap = laps_arr[i];
+        if (!lap["is_completed"]) continue;
+        
+        Dictionary sectors = lap["sector_times_ms"];
+        Array keys = sectors.keys();
+        for (int k = 0; k < keys.size(); k++) {
+            int sec_idx = keys[k];
+            int time = sectors[sec_idx];
+            if (time <= 0) continue;
+            
+            if (!best_sectors_dict.has(sec_idx) || time < (int)best_sectors_dict[sec_idx]) {
+                best_sectors_dict[sec_idx] = time;
+            }
+        }
+    }
 
     meta["best_lap_time"] = best_lap_time;
+    meta["best_sectors"] = best_sectors_dict;
     meta["laps"] = laps_arr;
 
     return meta;
 }
 
 Dictionary ACTelemetry::get_live_static_data() {
-    if (!is_logging) return Dictionary();
     if (!dataStatic) return Dictionary();
     return _static_to_dict(*dataStatic);
 }
@@ -647,14 +683,16 @@ Dictionary ACTelemetry::get_loaded_session_lap_stats(int lap_index) {
     if (lap.timestamp.empty()) return stats;
 
     int lap_time = 0;
-    Array sector_times;
+    Dictionary sector_times;
     float top_speed = 0.0f;
     int current_sec_idx = lap.currentSectorIndex[0];
 
     for (size_t i = 0; i < lap.timestamp.size(); i++) {
         // detect sector change
         if (lap.currentSectorIndex[i] != current_sec_idx) {
-            sector_times.push_back(lap.lastSectorTime[i]);
+            if (lap.lastSectorTime[i] > 0 && lap.lastSectorTime[i] <= lap.iCurrentTime[i] + 2000) {
+                sector_times[current_sec_idx] = lap.lastSectorTime[i];
+            }
             current_sec_idx = lap.currentSectorIndex[i];
         }
 
@@ -692,10 +730,12 @@ Dictionary ACTelemetry::get_loaded_session_lap_stats(int lap_index) {
             lap_time = lap.iCurrentTime.back();
         }
         
-        for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
-            if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
-                sector_times.push_back(next_lap.lastSectorTime[k]);
-                break;
+        if (is_completed) {
+            for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
+                if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
+                    sector_times[current_sec_idx] = next_lap.lastSectorTime[k];
+                    break;
+                }
             }
         }
     } else {
@@ -966,6 +1006,10 @@ PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path
         }
     }
 
+    // calculated math channels usually suffer from high-frequency noise
+    // due to position quantization and interpolation limits.
+    // we apply a centered moving average to smooth the delta without introducing phase shift.
+    smooth_float_array(result, 51); // 51 samples for smoother delta at high-res telemetry
     return result;
 }
 
@@ -1030,6 +1074,11 @@ void ACTelemetry::logging_loop() {
 
     timeBeginPeriod(1);
 
+    int stale_counter = 0;
+    int graphic_stale_counter = 0;
+    int local_last_graphic_packet_id = -1;
+    int max_stale_ticks = static_cast<int>(3.0 / sample_interval); // 3 secs timeout
+
     while (is_logging) {
         auto now = std::chrono::steady_clock::now();
         if (next_tick < now) {
@@ -1039,7 +1088,26 @@ void ACTelemetry::logging_loop() {
         }
 
         if (dataGraphic && dataPhysics) {
+            
+            if (dataGraphic->status == AC_OFF) {
+                game_disconnected.store(true);
+            }
+
+            // graphics packet updates as long as the game process is alive
+            // so we're detecting game crash or close with this
+            if (dataGraphic->packetId == local_last_graphic_packet_id) {
+                graphic_stale_counter++;
+                if (graphic_stale_counter > max_stale_ticks) {
+                    game_disconnected.store(true);
+                }
+            } else {
+                graphic_stale_counter = 0;
+            }
+            local_last_graphic_packet_id = dataGraphic->packetId;
+            
+            
             if (dataGraphic->status != AC_LIVE) {
+                stale_counter = 0;
                 std::this_thread::sleep_until(next_tick);
                 continue;
             }
@@ -1095,7 +1163,46 @@ void ACTelemetry::logging_loop() {
                 }
 
                 // track continuous spline distance
-                double spline_pos = dataGraphic->normalizedCarPosition * dataStatic->trackSPlineLength;
+                // graphic position updates at 60Hz, physics at 333Hz.
+                // using graphic pos directly causes staircase artifacts.
+                // we integrate physics speed for smooth high-frequency distance
+                // and soft-correct it to graphic pos.
+                static double internal_meter = -1.0;
+                
+                if (last_recorded_meter == -INFINITY) {
+                    internal_meter = -1.0; // reset on new lap
+                }
+                
+                double graphic_spline_pos = dataGraphic->normalizedCarPosition * dataStatic->trackSPlineLength;
+                
+                if (internal_meter < 0.0 || dataStatic->trackSPlineLength <= 0.0) {
+                    internal_meter = graphic_spline_pos;
+                } else {
+                    int packet_diff = dataPhysics->packetId - last_physics_packet_id;
+                    if (packet_diff > 0 && packet_diff < 100) {
+                        double dt = packet_diff / 333.333333333; // 333Hz physics tick
+                        internal_meter += (dataPhysics->speedKmh / 3.6) * dt;
+                    }
+                    
+                    // complementary filter: soft-correct towards graphic_spline_pos
+                    double diff = graphic_spline_pos - internal_meter;
+                    // handle track wrap-around
+                    if (diff < -dataStatic->trackSPlineLength / 2.0) diff += dataStatic->trackSPlineLength;
+                    if (diff > dataStatic->trackSPlineLength / 2.0) diff -= dataStatic->trackSPlineLength;
+                    
+                    if (std::abs(diff) < 20.0) {
+                        internal_meter += diff * 0.05; // 5% correction per tick
+                    } else {
+                        internal_meter = graphic_spline_pos; // hard reset on big jump
+                    }
+                }
+                
+                if (dataStatic->trackSPlineLength > 0.0) {
+                    while (internal_meter >= dataStatic->trackSPlineLength) internal_meter -= dataStatic->trackSPlineLength;
+                    while (internal_meter < 0.0) internal_meter += dataStatic->trackSPlineLength;
+                }
+
+                double spline_pos = internal_meter;
                 double dist_diff = 0.0;
                 
                 if (last_recorded_meter >= 0.0) {
@@ -1119,24 +1226,34 @@ void ACTelemetry::logging_loop() {
                     if (last_recorded_meter < 0.0) {
                         last_recorded_meter = current_meter;
                     } else {
-                        direction = (current_meter > last_recorded_meter) ? 1.0 : -1.0;
-                        last_recorded_meter += distance_threshold * direction;
+                        double jump_size = std::abs(current_meter - last_recorded_meter);
                         
-                        if (dataStatic->trackSPlineLength > 0.0) {
-                            if (last_recorded_meter >= dataStatic->trackSPlineLength) {
-                                last_recorded_meter -= dataStatic->trackSPlineLength;
-                            } else if (last_recorded_meter < 0.0) {
-                                last_recorded_meter += dataStatic->trackSPlineLength;
+                        // handle teleport jumps (session restart, pit return, etc..)
+                        // if the distance jumped is too large in a single frame
+                        // we don't try to interpolate all the way back (cuz that jump is impossible)
+                        if (jump_size > 20.0 && dataStatic->trackSPlineLength > 0.0 && 
+                            jump_size < dataStatic->trackSPlineLength - 20.0) {
+                            last_recorded_meter = current_meter;
+                        } else {
+                            direction = (current_meter > last_recorded_meter) ? 1.0 : -1.0;
+                            last_recorded_meter += distance_threshold * direction;
+                            
+                            if (dataStatic->trackSPlineLength > 0.0) {
+                                if (last_recorded_meter >= dataStatic->trackSPlineLength) {
+                                    last_recorded_meter -= dataStatic->trackSPlineLength;
+                                } else if (last_recorded_meter < 0.0) {
+                                    last_recorded_meter += dataStatic->trackSPlineLength;
+                                }
                             }
                         }
                     }
                     
                     auto& lap = sessions_data.back();
 
-                    // IMPORTANT: even the physics is 333hz, graphic is 60hz.
-                    // to get accurate data, we need to interpolate the new time and dist.
-                    // physics data will always be updated before graphic data
-                    // so we use the physics data to interpolate the some of the graphic data
+                    // time interpolation pass
+                    // since we trigger records based on high-frequency distance (complementary filter above),
+                    // we must also interpolate the 60hz graphic time to match the exact moment of this sample.
+                    // we use the 333hz physics packet difference to smoothly advance the clock.
                     double smoothed_timestamp = dataGraphic->iCurrentTime / 1000.0;
                     int32_t smoothed_iCurrentTime = dataGraphic->iCurrentTime;
                     double smoothed_normalizedCarPosition = dataGraphic->normalizedCarPosition;
