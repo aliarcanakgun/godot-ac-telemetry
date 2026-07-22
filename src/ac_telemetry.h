@@ -57,6 +57,7 @@ namespace godot {
         void logging_loop();
         
         String _open_session_file(const String& file_path, std::ifstream& infile, SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets);
+        Dictionary _calculate_session_metadata(const SPageStatic& stat, uint64_t count, const std::vector<LapDataChannels>& laps);
 
     protected:
         static void _bind_methods();
@@ -96,6 +97,7 @@ namespace godot {
 
         String load_session_data(String file_path);
         Dictionary get_session_metadata(String file_path);
+        Dictionary get_loaded_session_metadata();
         Ref<GDLapTelemetry> get_loaded_session_lap_data(int lap_index);
         Dictionary get_loaded_session_lap_stats(int lap_index);
         Dictionary get_loaded_session_static_data();

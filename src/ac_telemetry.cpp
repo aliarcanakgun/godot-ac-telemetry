@@ -78,6 +78,7 @@ void ACTelemetry::_bind_methods() {
 
     ClassDB::bind_method(D_METHOD("load_session_data", "file_path"), &ACTelemetry::load_session_data);
     ClassDB::bind_method(D_METHOD("get_session_metadata", "file_path"), &ACTelemetry::get_session_metadata);
+    ClassDB::bind_method(D_METHOD("get_loaded_session_metadata"), &ACTelemetry::get_loaded_session_metadata);
     ClassDB::bind_method(D_METHOD("close_loaded_session"), &ACTelemetry::close_loaded_session);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_count"), &ACTelemetry::get_loaded_session_lap_count);
     ClassDB::bind_method(D_METHOD("get_loaded_session_sample_interval"), &ACTelemetry::get_loaded_session_sample_interval);
@@ -484,19 +485,8 @@ String ACTelemetry::load_session_data(String file_path) {
     return "";
 }
 
-Dictionary ACTelemetry::get_session_metadata(String file_path) {
+Dictionary ACTelemetry::_calculate_session_metadata(const SPageStatic& stat, uint64_t count, const std::vector<LapDataChannels>& laps) {
     Dictionary meta;
-    std::ifstream infile;
-    SPageStatic stat;
-    double interval = 0, spm = 0;
-    uint64_t count = 0;
-    std::vector<uint64_t> offsets;
-
-    String err = _open_session_file(file_path, infile, stat, interval, spm, count, offsets);
-    if (!err.is_empty()) {
-        meta["error"] = err;
-        return meta;
-    }
 
     meta["track_name"] = wchar_to_gdstring(stat.track, 33);
     meta["track_config"] = wchar_to_gdstring(stat.trackConfiguration, 33);
@@ -506,11 +496,11 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
 
     Array laps_arr;
     int best_lap_time = 0;
+    Dictionary sector_positions_norm;
+    Dictionary sector_positions_m;
 
     for (uint64_t i = 0; i < count; i++) {
-        infile.seekg(offsets[i]);
-        LapDataChannels lap;
-        lap.read_metadata_from_stream(infile);
+        const LapDataChannels& lap = laps[i];
 
         if (lap.speedKmh.empty()) continue;
 
@@ -525,6 +515,13 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
                 if (lap.lastSectorTime[j] > 0 && lap.lastSectorTime[j] <= lap.iCurrentTime[j] + 2000) {
                     sector_times[current_sec_idx] = lap.lastSectorTime[j];
                 }
+                
+                if (!sector_positions_norm.has(current_sec_idx) && j < lap.normalizedCarPosition.size()) {
+                    float pos = lap.normalizedCarPosition[j];
+                    sector_positions_norm[current_sec_idx] = pos;
+                    sector_positions_m[current_sec_idx] = pos * stat.trackSPlineLength;
+                }
+                
                 current_sec_idx = lap.currentSectorIndex[j];
             }
             if (lap.speedKmh[j] > top_speed) {
@@ -552,10 +549,7 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
         int next_lap_best_time = 0;
         // try getting exact time from next lap if exists
         if (i + 1 < count) {
-            std::streampos curr_pos = infile.tellg();
-            infile.seekg(offsets[i + 1]);
-            LapDataChannels next_lap;
-            next_lap.read_metadata_from_stream(infile);
+            const LapDataChannels& next_lap = laps[i + 1];
             
             if (!next_lap.iBestTime.empty()) {
                 next_lap_best_time = next_lap.iBestTime[0];
@@ -579,7 +573,6 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
                     }
                 }
             }
-            infile.seekg(curr_pos);
         } else {
             lap_time = lap.iCurrentTime.empty() ? 0 : lap.iCurrentTime.back();
             is_completed = false;
@@ -617,10 +610,10 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
 
     Dictionary best_sectors_dict;
     for (int i = 0; i < laps_arr.size(); i++) {
-        Dictionary lap = laps_arr[i];
-        if (!lap["is_completed"]) continue;
+        Dictionary lap_dict = laps_arr[i];
+        if (!lap_dict["is_completed"]) continue;
         
-        Dictionary sectors = lap["sector_times_ms"];
+        Dictionary sectors = lap_dict["sector_times_ms"];
         Array keys = sectors.keys();
         for (int k = 0; k < keys.size(); k++) {
             int sec_idx = keys[k];
@@ -635,9 +628,45 @@ Dictionary ACTelemetry::get_session_metadata(String file_path) {
 
     meta["best_lap_time"] = best_lap_time;
     meta["best_sectors"] = best_sectors_dict;
+    meta["sector_positions_norm"] = sector_positions_norm;
+    meta["sector_positions_m"] = sector_positions_m;
     meta["laps"] = laps_arr;
 
     return meta;
+}
+
+Dictionary ACTelemetry::get_session_metadata(String file_path) {
+    Dictionary meta;
+    std::ifstream infile;
+    SPageStatic stat;
+    double interval = 0, spm = 0;
+    uint64_t count = 0;
+    std::vector<uint64_t> offsets;
+
+    String err = _open_session_file(file_path, infile, stat, interval, spm, count, offsets);
+    if (!err.is_empty()) {
+        meta["error"] = err;
+        return meta;
+    }
+
+    std::vector<LapDataChannels> laps(count);
+    for (uint64_t i = 0; i < count; i++) {
+        infile.seekg(offsets[i]);
+        laps[i].read_metadata_from_stream(infile);
+    }
+
+    infile.close();
+
+    return _calculate_session_metadata(stat, count, laps);
+}
+
+Dictionary ACTelemetry::get_loaded_session_metadata() {
+    if (loaded_session_lap_count < 0) {
+        Dictionary meta;
+        meta["error"] = "no session loaded";
+        return meta;
+    }
+    return _calculate_session_metadata(loaded_session_static_data, loaded_session_lap_count, loaded_session_data);
 }
 
 Dictionary ACTelemetry::get_live_static_data() {
