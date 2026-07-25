@@ -89,6 +89,7 @@ void ACTelemetry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_fuel_consumption", "lap_index"), &ACTelemetry::get_loaded_session_lap_fuel_consumption);
     ClassDB::bind_method(D_METHOD("get_loaded_session_total_fuel_consumption"), &ACTelemetry::get_loaded_session_total_fuel_consumption);
     ClassDB::bind_method(D_METHOD("get_loaded_session_total_laps"), &ACTelemetry::get_loaded_session_total_laps);
+    ClassDB::bind_method(D_METHOD("get_array_min_max", "array"), &ACTelemetry::get_array_min_max);
     ClassDB::bind_method(D_METHOD("calculate_lap_time_delta", "target_file_path", "target_lap_index", "current_file_path", "current_lap_index", "reference_positions"), &ACTelemetry::calculate_lap_time_delta, DEFVAL(0), DEFVAL(""), DEFVAL(0), DEFVAL(PackedFloat32Array()));
 
     ClassDB::add_signal("ACTelemetry", MethodInfo("connection_lost"));
@@ -516,10 +517,12 @@ Dictionary ACTelemetry::_calculate_session_metadata(const SPageStatic& stat, uin
                     sector_times[current_sec_idx] = lap.lastSectorTime[j];
                 }
                 
-                if (!sector_positions_norm.has(current_sec_idx) && j < lap.normalizedCarPosition.size()) {
-                    float pos = lap.normalizedCarPosition[j];
-                    sector_positions_norm[current_sec_idx] = pos;
-                    sector_positions_m[current_sec_idx] = pos * stat.trackSPlineLength;
+                if (lap.currentSectorIndex[j] > current_sec_idx) {
+                    if (!sector_positions_norm.has(current_sec_idx) && j < lap.normalizedCarPosition.size()) {
+                        float pos = lap.normalizedCarPosition[j];
+                        sector_positions_norm[current_sec_idx] = pos;
+                        sector_positions_m[current_sec_idx] = pos * stat.trackSPlineLength;
+                    }
                 }
                 
                 current_sec_idx = lap.currentSectorIndex[j];
@@ -684,6 +687,7 @@ Ref<GDLapTelemetry> ACTelemetry::get_live_snapshot() {
 
     if (!sessions_data.empty()) {
         std::lock_guard<std::mutex> lock(data_mutex);
+        snapshot->set_samples_per_meter(samples_per_meter);
         snapshot->fill_from_channels(sessions_data.back());
     }
 
@@ -699,6 +703,7 @@ Ref<GDLapTelemetry> ACTelemetry::get_loaded_session_lap_data(int lap_index) {
 
     Ref<GDLapTelemetry> data;
     data.instantiate();
+    data->set_samples_per_meter(loaded_session_samples_per_meter);
     data->fill_from_channels(loaded_session_data[lap_index]);
 
     return data;
@@ -871,13 +876,48 @@ void ACTelemetry::close_loaded_session() {
     loaded_session_static_data = {};
 }
 
-PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path, int target_lap_index, String current_file_path, int current_lap_index, PackedFloat32Array reference_positions) {
-    PackedFloat32Array result;
+Vector2 ACTelemetry::get_array_min_max(const Variant& arr) {
+    if (arr.get_type() == Variant::PACKED_FLOAT32_ARRAY) {
+        PackedFloat32Array f_arr = arr;
+        if (f_arr.is_empty()) return Vector2(0, 0);
+        const float* ptr = f_arr.ptr();
+        float min_val = ptr[0];
+        float max_val = ptr[0];
+        for (int i = 1; i < f_arr.size(); i++) {
+            if (ptr[i] < min_val) min_val = ptr[i];
+            if (ptr[i] > max_val) max_val = ptr[i];
+        }
+        return Vector2(min_val, max_val);
+    } 
+    else if (arr.get_type() == Variant::PACKED_INT32_ARRAY) {
+        PackedInt32Array i_arr = arr;
+        if (i_arr.is_empty()) return Vector2(0, 0);
+        const int32_t* ptr = i_arr.ptr();
+        float min_val = (float)ptr[0];
+        float max_val = (float)ptr[0];
+        for (int i = 1; i < i_arr.size(); i++) {
+            if (ptr[i] < min_val) min_val = (float)ptr[i];
+            if (ptr[i] > max_val) max_val = (float)ptr[i];
+        }
+        return Vector2(min_val, max_val);
+    }
+    
+    return Vector2(0, 0);
+}
+
+Dictionary ACTelemetry::calculate_lap_time_delta(String target_file_path, int target_lap_index, String current_file_path, int current_lap_index, PackedFloat32Array reference_positions) {
+    PackedFloat32Array cumulative_delta;
+    Dictionary result;
+    result["cumulative_delta"] = PackedFloat32Array();
+    result["delta_rate"] = PackedFloat32Array();
+
     if (target_file_path.is_empty() || target_lap_index < 0 || current_lap_index < 0) return result;
     
     String actual_curr_path = current_file_path.is_empty() ? target_file_path : current_file_path;
 
-    auto load_lap = [this](String file_path, int lap_index, LapDataChannels &out_lap) -> bool {
+    double session_spm = 1.0;
+
+    auto load_lap = [this, &session_spm](String file_path, int lap_index, LapDataChannels &out_lap) -> bool {
         std::ifstream infile;
         SPageStatic stat;
         double interval, spm;
@@ -889,6 +929,8 @@ PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path
         }
 
         if (lap_index < 0 || lap_index >= count) return false;
+
+        session_spm = spm;
 
         infile.seekg(offsets[lap_index]);
         out_lap.read_from_stream(infile);
@@ -926,8 +968,8 @@ PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path
 
     if (ref_n == 0) return result;
 
-    result.resize(ref_n);
-    float* ptr = result.ptrw();
+    cumulative_delta.resize(ref_n);
+    float* ptr = cumulative_delta.ptrw();
 
     // handle wrap-around at the end of the lap for target
     std::vector<float> target_pos(target_n);
@@ -1038,7 +1080,21 @@ PackedFloat32Array ACTelemetry::calculate_lap_time_delta(String target_file_path
     // calculated math channels usually suffer from high-frequency noise
     // due to position quantization and interpolation limits.
     // we apply a centered moving average to smooth the delta without introducing phase shift.
-    smooth_float_array(result, 51); // 51 samples for smoother delta at high-res telemetry
+    // dynamic window size targeting 25 meters of physical track distance.
+    int window_size = std::max(3, (int)(25.0 * session_spm));
+    if (window_size % 2 == 0) window_size += 1; // ensure odd number
+    smooth_float_array(cumulative_delta, window_size);
+
+    result["cumulative_delta"] = cumulative_delta;
+
+    PackedFloat32Array delta_rate;
+    delta_rate.resize(cumulative_delta.size());
+    float* delta_rate_ptr = delta_rate.ptrw();
+    for (int i = 1; i < cumulative_delta.size(); i++) {
+        delta_rate_ptr[i] = cumulative_delta[i] - cumulative_delta[i - 1];
+    }
+    result["delta_rate"] = delta_rate;
+
     return result;
 }
 

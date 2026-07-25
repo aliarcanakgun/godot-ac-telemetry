@@ -103,7 +103,7 @@ static PackedFloat32Array to_float_array_mm(const std::vector<T>& vec) {
     return arr;
 }
 
-static PackedFloat32Array calc_derivative(const std::vector<float>& values, const std::vector<int32_t>& time_ms, float multiplier = 1.0f) {
+static PackedFloat32Array calc_derivative(const std::vector<float>& values, const std::vector<int32_t>& time_ms, int smoothing_window, float multiplier = 1.0f) {
     PackedFloat32Array arr;
     if (values.empty() || time_ms.empty() || values.size() != time_ms.size()) return arr;
     arr.resize(values.size());
@@ -136,12 +136,19 @@ static PackedFloat32Array calc_derivative(const std::vector<float>& values, cons
         ptr[last] = 0.0f;
     }
     
-    smooth_float_array(arr, 15);
+    smooth_float_array(arr, smoothing_window);
     return arr;
+}
+
+void GDLapTelemetry::set_samples_per_meter(float p_spm) {
+    samples_per_meter = p_spm;
 }
 
 void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels.clear();
+    
+    int derivative_smoothing_window = std::max(3, (int)(5.0 * samples_per_meter));
+    if (derivative_smoothing_window % 2 == 0) derivative_smoothing_window += 1;
     
     // graphic basics
     cached_channels["timestamp"] = to_float_array(c.timestamp);
@@ -172,6 +179,18 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["steerAngle"] = to_float_array(c.steerAngle);
     cached_channels["speedKmh"] = to_float_array(c.speedKmh);
     cached_channels["isAIControlled"] = to_int_array(c.isAIControlled);
+    
+    PackedFloat32Array gd_gas = cached_channels["gas"];
+    PackedFloat32Array gd_brake = cached_channels["brake"];
+    
+    PackedFloat32Array combined_pedals;
+    combined_pedals.resize(gd_gas.size());
+    float* combined_ptr = combined_pedals.ptrw();
+    
+    for (int i = 0; i < gd_gas.size(); i++) {
+        combined_ptr[i] = (gd_gas[i] - gd_brake[i]) * 100.0f;
+    }
+    cached_channels["gasBrakeCombined"] = combined_pedals;
 
     // vectors
     cached_channels["velocity_x"] = to_float_array(c.velocity_x);
@@ -233,10 +252,10 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["suspensionTravel_rl"] = to_float_array_mm(c.suspensionTravel_rl);
     cached_channels["suspensionTravel_rr"] = to_float_array_mm(c.suspensionTravel_rr);
 
-    cached_channels["damperVelocity_fl"] = calc_derivative(c.suspensionTravel_fl, c.iCurrentTime, 1000.0f);
-    cached_channels["damperVelocity_fr"] = calc_derivative(c.suspensionTravel_fr, c.iCurrentTime, 1000.0f);
-    cached_channels["damperVelocity_rl"] = calc_derivative(c.suspensionTravel_rl, c.iCurrentTime, 1000.0f);
-    cached_channels["damperVelocity_rr"] = calc_derivative(c.suspensionTravel_rr, c.iCurrentTime, 1000.0f);
+    cached_channels["damperVelocity_fl"] = calc_derivative(c.suspensionTravel_fl, c.iCurrentTime, derivative_smoothing_window, 1000.0f);
+    cached_channels["damperVelocity_fr"] = calc_derivative(c.suspensionTravel_fr, c.iCurrentTime, derivative_smoothing_window, 1000.0f);
+    cached_channels["damperVelocity_rl"] = calc_derivative(c.suspensionTravel_rl, c.iCurrentTime, derivative_smoothing_window, 1000.0f);
+    cached_channels["damperVelocity_rr"] = calc_derivative(c.suspensionTravel_rr, c.iCurrentTime, derivative_smoothing_window, 1000.0f);
 
     cached_channels["brakeTemp_fl"] = to_float_array(c.brakeTemp_fl);
     cached_channels["brakeTemp_fr"] = to_float_array(c.brakeTemp_fr);
