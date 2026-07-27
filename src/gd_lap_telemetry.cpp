@@ -176,7 +176,8 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     cached_channels["fuel"] = to_float_array(c.fuel);
     cached_channels["gear"] = to_int_array_offset(c.gear, -1);
     cached_channels["rpms"] = to_int_array(c.rpms);
-    cached_channels["steerAngle"] = to_float_array(c.steerAngle);
+    cached_channels["steerAngle"] = to_float_array_pct(c.steerAngle);
+    cached_channels["steerVelo"] = calc_derivative(c.steerAngle, c.iCurrentTime, derivative_smoothing_window, 100.0f);
     cached_channels["speedKmh"] = to_float_array(c.speedKmh);
     cached_channels["isAIControlled"] = to_int_array(c.isAIControlled);
     
@@ -188,7 +189,7 @@ void GDLapTelemetry::fill_from_channels(const LapDataChannels &c) {
     float* combined_ptr = combined_pedals.ptrw();
     
     for (int i = 0; i < gd_gas.size(); i++) {
-        combined_ptr[i] = (gd_gas[i] - gd_brake[i]) * 100.0f;
+        combined_ptr[i] = gd_gas[i] - gd_brake[i];
     }
     cached_channels["gasBrakeCombined"] = combined_pedals;
 
