@@ -881,11 +881,22 @@ Vector2 ACTelemetry::get_array_min_max(const Variant& arr) {
         PackedFloat32Array f_arr = arr;
         if (f_arr.is_empty()) return Vector2(0, 0);
         const float* ptr = f_arr.ptr();
-        float min_val = ptr[0];
-        float max_val = ptr[0];
-        for (int i = 1; i < f_arr.size(); i++) {
-            if (ptr[i] < min_val) min_val = ptr[i];
-            if (ptr[i] > max_val) max_val = ptr[i];
+        
+        float min_val = 0.0f;
+        float max_val = 0.0f;
+        bool initialized = false;
+        
+        for (int i = 0; i < f_arr.size(); i++) {
+            if (std::isnan(ptr[i]) || std::isinf(ptr[i])) continue;
+            
+            if (!initialized) {
+                min_val = ptr[i];
+                max_val = ptr[i];
+                initialized = true;
+            } else {
+                if (ptr[i] < min_val) min_val = ptr[i];
+                if (ptr[i] > max_val) max_val = ptr[i];
+            }
         }
         return Vector2(min_val, max_val);
     } 
@@ -893,8 +904,10 @@ Vector2 ACTelemetry::get_array_min_max(const Variant& arr) {
         PackedInt32Array i_arr = arr;
         if (i_arr.is_empty()) return Vector2(0, 0);
         const int32_t* ptr = i_arr.ptr();
+        
         float min_val = (float)ptr[0];
         float max_val = (float)ptr[0];
+        
         for (int i = 1; i < i_arr.size(); i++) {
             if (ptr[i] < min_val) min_val = (float)ptr[i];
             if (ptr[i] > max_val) max_val = (float)ptr[i];
