@@ -65,3 +65,40 @@ void smooth_float_array(godot::PackedFloat32Array& arr, int window_size) {
         out_ptr[i] = smoothed_result[i];
     }
 }
+
+PackedFloat32Array calc_derivative(const std::vector<float>& values, const std::vector<int32_t>& time_ms, int smoothing_window, float multiplier) {
+    PackedFloat32Array arr;
+    if (values.empty() || time_ms.empty() || values.size() != time_ms.size()) return arr;
+    arr.resize(values.size());
+    float* ptr = arr.ptrw();
+    
+    // forward difference for the first point
+    if (values.size() > 1) {
+        float dt = (float)(time_ms[1] - time_ms[0]) / 1000.0f;
+        ptr[0] = (dt > 0.0001f) ? ((values[1] - values[0]) / dt) * multiplier : 0.0f;
+    } else {
+        ptr[0] = 0.0f;
+    }
+
+    // central difference for the middle
+    for (size_t i = 1; i < values.size() - 1; ++i) {
+        float dt = (float)(time_ms[i + 1] - time_ms[i - 1]) / 1000.0f;
+        if (dt > 0.0001f) {
+            ptr[i] = ((values[i + 1] - values[i - 1]) / dt) * multiplier;
+        } else {
+            ptr[i] = 0.0f;
+        }
+    }
+
+    // backward difference for the last point
+    size_t last = values.size() - 1;
+    if (last > 0) {
+        float dt = (float)(time_ms[last] - time_ms[last - 1]) / 1000.0f;
+        ptr[last] = (dt > 0.0001f) ? ((values[last] - values[last - 1]) / dt) * multiplier : 0.0f;
+    } else if (last > 0) {
+        ptr[last] = 0.0f;
+    }
+    
+    smooth_float_array(arr, smoothing_window);
+    return arr;
+}

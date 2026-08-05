@@ -1,4 +1,4 @@
-#include "ac_telemetry.h"
+#include "sim_telemetry_manager.h"
 #include "gd_lap_telemetry.h"
 #include "register_types.h"
 #include <gdextension_interface.h>
@@ -12,7 +12,7 @@ void initialize_ac_module(ModuleInitializationLevel p_level) {
 		return;
 	}
     
-	GDREGISTER_CLASS(ACTelemetry);
+	GDREGISTER_CLASS(SimTelemetryManager);
 	GDREGISTER_RUNTIME_CLASS(GDLapTelemetry);
 }
 

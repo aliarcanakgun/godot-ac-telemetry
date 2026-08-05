@@ -20,7 +20,7 @@ sources = Glob("src/*.cpp")
 # env["suffix"] includes the build's feature tags (e.g. '.windows.template_debug.x86_64')
 # (see https://docs.godotengine.org/en/stable/tutorials/export/feature_tags.html).
 # The final path should match a path in the '.gdextension' file.
-name = "ac-telemetry"
+name = "godot-sim-telemetry"
 lib_filename = f"{env.subst('$SHLIBPREFIX')}{name}{env['suffix']}{env.subst('$SHLIBSUFFIX')}"
 
 if env["target"] in ["editor", "template_debug"]:
@@ -29,7 +29,7 @@ if env["target"] in ["editor", "template_debug"]:
 
 # Creates a SCons target for the path with our sources.
 library = env.SharedLibrary(
-    "demo/addons/ac-telemetry/bin/{}".format(lib_filename),
+    "demo/addons/godot-sim-telemetry/bin/{}".format(lib_filename),
     source=sources,
 )
 

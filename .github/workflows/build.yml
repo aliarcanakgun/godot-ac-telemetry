@@ -43,8 +43,8 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ac-telemetry-${{ matrix.platform }}-${{ matrix.arch }}
-          path: demo/addons/ac-telemetry/
+          name: godot-sim-telemetry-${{ matrix.platform }}-${{ matrix.arch }}
+          path: demo/addons/godot-sim-telemetry/
 
   package:
     needs: build
@@ -57,23 +57,23 @@ jobs:
 
       - name: Merge into single addon folder
         run: |
-          mkdir -p release/addons/ac-telemetry
-          for dir in artifacts/ac-telemetry-*/; do
-            rsync -a "$dir"/ release/addons/ac-telemetry/
+          mkdir -p release/addons/godot-sim-telemetry
+          for dir in artifacts/godot-sim-telemetry-*/; do
+            rsync -a "$dir"/ release/addons/godot-sim-telemetry/
           done
-          find release/addons/ac-telemetry -name "*.exp" -type f -delete
-          find release/addons/ac-telemetry -name "*.lib" -type f -delete
+          find release/addons/godot-sim-telemetry -name "*.exp" -type f -delete
+          find release/addons/godot-sim-telemetry -name "*.lib" -type f -delete
 
       - name: Create release ZIP
         run: |
-          ZIP_NAME="ac-telemetry-${{ github.ref_name }}.zip"
+          ZIP_NAME="godot-sim-telemetry-${{ github.ref_name }}.zip"
           cd release && zip -r ../$ZIP_NAME addons/
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Upload release ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: ac-telemetry-release
+          name: godot-sim-telemetry-release
           path: ${{ env.ZIP_NAME }}
 
       - name: Publish to GitHub Release

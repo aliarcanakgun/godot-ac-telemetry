@@ -8,11 +8,11 @@
 
 # Compiled Binaries
 src/gen/doc_data.gen.cpp
-demo/addons/ac-telemetry/bin/*
-!demo/addons/ac-telemetry/bin/*.gdextension
+demo/addons/godot-sim-telemetry/bin/*
 
 # Development Files
-demo/*.bin
-doc.pdf
+ac_mem.pdf
+ac_evo_mem.mhtml
+acc_mem.pdf
 todo.md
-todo2.md
+todo*.md
