@@ -1,4 +1,4 @@
-# Godot AC Telemetry Extension
+# Godot Sim Telemetry Extension
 
 ### Requirements:
 * Godot Engine 4.5+
@@ -27,6 +27,7 @@ scons platform=windows target=template_release
 ```
 
 ### Features:
+* **Multi-Sim Architecture:** Built on a modular `ISimProvider` structure. While Assetto Corsa is fully supported out of the box, the architecture is specifically designed to accommodate upcoming integrations for ACC, AC Evo and iRacing.
 * **Thread-Safe Background Logging:** Telemetry is polled safely in a background thread, preventing data loss during stutters and avoiding performance hits on the main Godot thread.
 * **Channel-Based Data Architecture:** Data is organized into channels (arrays of values over time or distance), making it drastically easier to plot graphs or run analytics in GDScript.
 * **Distance-Based & Time-Based Sampling:** Accurate distance-normalized telemetry alongside time-based intervals.
@@ -37,22 +38,25 @@ scons platform=windows target=template_release
 ```gdscript
 extends Node
 
-var telemetry: ACTelemetry
+var telemetry: SimTelemetryManager
 
 func _ready():
-    telemetry = ACTelemetry.new()
+    telemetry = SimTelemetryManager.new()
     add_child(telemetry)
     
-    var err = telemetry.connect_to_ac()
+    # auto-detect which simulator is currently running
+    var active_sim = telemetry.detect_active_sim()
+    var err = telemetry.connect_to_sim(active_sim) 
+    
     if err == "":
-        print("Connected to Assetto Corsa!")
+        print("Connected to active simulator: ", telemetry.get_current_sim_id())
         # a valid output path is required as a fallback in case of a crash/disconnect
         telemetry.start_logging("user://telemetry_backup.actl")
     else:
         print("Failed to connect: ", err)
 
 func _process(delta):
-    if telemetry.is_connected_to_ac():
+    if telemetry.is_connected_to_sim():
         # get live data for dashboards
         var live_data = telemetry.get_live_snapshot()
         var speed_channel = live_data.get_channels().get("physics_speedKmh", [])
@@ -63,20 +67,24 @@ func _exit_tree():
     if telemetry.is_currently_logging():
         var save_path = telemetry.finish_logging("user://telemetry_session.actl")
         print("Session saved to: ", save_path)
-    telemetry.disconnect_from_ac()
+    telemetry.disconnect_from_sim()
 ```
 
 ### Public functions & properties:
-* `connect_to_ac() -> String`: Establishes a connection to Assetto Corsa via shared memory. Returns `""` on success or an error string on failure.
-* `disconnect_from_ac() -> void`: Closes all shared memory connections.
+* `connect_to_sim(sim_id: String) -> String`: Establishes a connection to a specific simulator (e.g. `"AC"`, `"ACC"`). Use `detect_active_sim()` first to get the active ID. Returns `""` on success or an error string.
+* `detect_active_sim() -> String`: Checks shared memory signatures to detect which simulator is currently running and returns its ID.
+* `disconnect_from_sim() -> void`: Closes all shared memory connections.
 * `start_logging(output_file_path: String) -> String`: Starts background telemetry logging. `output_file_path` is required as a fallback path in case of crash/disconnect. Returns `""` on success or an error string.
 * `finish_logging(output_file_path: String = "") -> String`: Stops logging and saves the telemetry session. If `output_file_path` is left empty, the fallback path provided in `start_logging` is used. Returns the saved file path or an error string.
-* `is_connected_to_ac() -> bool`: Returns whether shared-memory mappings are currently active.
+* `is_connected_to_sim() -> bool`: Returns whether shared-memory mappings are currently active.
+* `get_current_sim_id() -> String`: Returns the ID of the currently connected simulator (e.g., `"AC"`, `"ACC"`, `"EVO"`).
+* `get_sim_status() -> int`: Returns the current state of the simulator (e.g., replay, live, off).
 * `is_currently_logging() -> bool`: Returns whether the background logging thread is running.
 * `get_live_static_data() -> Dictionary`: Returns static track and car info for the live session.
 * `get_live_snapshot() -> GDLapTelemetry`: Returns the most recent telemetry snapshot as a `GDLapTelemetry` object (contains single-point arrays in channels).
 * `load_session_data(file_path: String) -> String`: Loads a previously saved telemetry session. Returns `""` on success or an error string.
 * `get_session_metadata(file_path: String) -> Dictionary`: Parses session metadata (lap count, session static data, sample rates) without loading the entire telemetry data into memory.
+* `get_loaded_session_metadata() -> Dictionary`: Returns the metadata of the currently loaded session.
 * `get_loaded_session_lap_data(lap_index: int) -> GDLapTelemetry`: Returns all channel data for the specified lap as a `GDLapTelemetry` object.
 * `get_loaded_session_lap_stats(lap_index: int) -> Dictionary`: Returns key statistics for a lap (top speed, min speed, sector times, average values).
 * `get_loaded_session_static_data() -> Dictionary`: Returns static data of the loaded session.
@@ -94,7 +102,7 @@ func _exit_tree():
 * Signal `connection_lost`: Emitted when the shared memory connection is unexpectedly lost.
 
 ### Data & file notes:
-* **Channel-Based Architecture:** Telemetry is now organized into `GDLapTelemetry` objects containing channels (arrays of values over time/distance) instead of raw struct snapshots. This makes the data drastically easier to graph and analyze within GDScript.
+* **Channel-Based Architecture:** Telemetry is organized into `GDLapTelemetry` objects containing channels (arrays of values over time/distance) instead of raw struct snapshots. This makes the data drastically easier to graph and analyze within GDScript.
 * Output file: Contains serialized telemetry channels organized by laps. The entire session is flushed to the binary file only when logging is finished or connection is lost.
-* Supported Sims: Telemetry is developed for original Assetto Corsa. Multi-sim support is planned for the future (in a different branch).
-* Platform: Current implementation uses Win32 APIs (OpenFileMapping, MapViewOfFile, FormatMessage, etc.) and is Windows-only.
+* Supported Sims: Through the modular `ISimProvider` architecture, the extension is built to support multiple simulators. Currently, original Assetto Corsa is fully supported. Support for ACC, AC Evo and iRacing is planned and heavily relies on the new base provider. Additional sims can be easily integrated by writing custom providers.
+* Platform: Current implementation relies on Win32 APIs (OpenFileMapping, MapViewOfFile, FormatMessage, etc.) for high-performance memory sharing and is Windows-only.
