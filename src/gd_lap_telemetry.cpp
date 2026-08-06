@@ -9,7 +9,6 @@ GDLapTelemetry::GDLapTelemetry() {}
 GDLapTelemetry::~GDLapTelemetry() {}
 
 void GDLapTelemetry::_bind_methods() {
-    ClassDB::bind_method(D_METHOD("set_channels", "p_channels"), &GDLapTelemetry::set_channels);
     ClassDB::bind_method(D_METHOD("get_channels"), &GDLapTelemetry::get_channels);
     ClassDB::bind_method(D_METHOD("get_channel_average", "channel_name"), &GDLapTelemetry::get_channel_average);
 }

@@ -1,23 +1,30 @@
-<class name="ACTelemetry" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<class name="SimTelemetryManager" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
     <brief_description>
-        Interface for Assetto Corsa telemetry data acquisition via shared memory.
+        Core manager for simulator connections, telemetry data acquisition, and session handling.
     </brief_description>
     <description>
-        [ACTelemetry] manages real-time telemetry data from Assetto Corsa. It provides thread-safe background logging functionality to connect to the game, log telemetry channels based on time or distance, and load/analyze previously recorded sessions.
+        [SimTelemetryManager] handles real-time telemetry data across multiple simulators via the modular ISimProvider architecture. It provides thread-safe background logging functionality to connect to supported simulators, log telemetry channels based on time or distance, and load/analyze previously recorded sessions.
     </description>
     <tutorials>
     </tutorials>
     <methods>
-        <method name="connect_to_ac">
+        <method name="connect_to_sim">
             <return type="String" />
+            <param index="0" name="sim_id" type="String" />
             <description>
-                Establishes a connection to Assetto Corsa via shared memory. Returns an empty string on success, or an error message on failure.
+                Establishes a connection to the specified simulator (e.g., "AC", "ACC"). Use [method detect_active_sim] to discover the active simulator first. Returns an empty string on success, or an error message on failure.
             </description>
         </method>
-        <method name="disconnect_from_ac">
+        <method name="detect_active_sim" qualifiers="const">
+            <return type="String" />
+            <description>
+                Scans shared memory signatures to detect which simulator is currently running and returns its ID.
+            </description>
+        </method>
+        <method name="disconnect_from_sim">
             <return type="void" />
             <description>
-                Closes all shared memory connections to Assetto Corsa. Safe to call even if not connected.
+                Closes all shared memory connections to the current simulator. Safe to call even if not connected.
             </description>
         </method>
         <method name="start_logging">
@@ -58,6 +65,12 @@
             <param index="0" name="file_path" type="String" />
             <description>
                 Parses the metadata (lap counts, intervals, track info) of a session file without loading the entire telemetry data into memory.
+            </description>
+        </method>
+        <method name="get_loaded_session_metadata">
+            <return type="Dictionary" />
+            <description>
+                Returns the metadata of the currently loaded session.
             </description>
         </method>
         <method name="get_loaded_session_lap_data">
@@ -134,10 +147,36 @@
                 Calculates the time delta between a current lap and a target (reference) lap across distance. Returns an array of time differences.
             </description>
         </method>
-        <method name="is_connected_to_ac" qualifiers="const">
+        <method name="get_array_min_max">
+            <return type="Vector2" />
+            <param index="0" name="array" type="Variant" />
+            <description>
+                Calculates and returns the minimum (x) and maximum (y) values of a numeric array. Useful for auto-scaling graphs.
+            </description>
+        </method>
+        <method name="get_channel_name">
+            <return type="String" />
+            <param index="0" name="standard_name" type="String" />
+            <description>
+                Converts a standard telemetry channel name into the internal format used by the currently active simulator provider.
+            </description>
+        </method>
+        <method name="is_connected_to_sim" qualifiers="const">
             <return type="bool" />
             <description>
-                Returns [code]true[/code] if actively connected to Assetto Corsa's shared memory.
+                Returns [code]true[/code] if actively connected to a simulator's shared memory.
+            </description>
+        </method>
+        <method name="get_current_sim_id" qualifiers="const">
+            <return type="String" />
+            <description>
+                Returns the ID of the currently connected simulator.
+            </description>
+        </method>
+        <method name="get_sim_status">
+            <return type="int" />
+            <description>
+                Returns the current simulation state from the active provider.
             </description>
         </method>
         <method name="is_currently_logging" qualifiers="const">
@@ -155,29 +194,29 @@
     <signals>
         <signal name="connection_lost">
             <description>
-                Emitted when the shared memory connection to Assetto Corsa is unexpectedly lost (e.g., game closed).
+                Emitted when the shared memory connection to the simulator is unexpectedly lost (e.g., game closed).
             </description>
         </signal>
     </signals>
     <constants>
-        <constant name="STATUS_OFF" value="0" enum="ACStatusType">Game is off.</constant>
-        <constant name="STATUS_REPLAY" value="1" enum="ACStatusType">Game is in replay mode.</constant>
-        <constant name="STATUS_LIVE" value="2" enum="ACStatusType">Game is running live.</constant>
-        <constant name="STATUS_PAUSE" value="3" enum="ACStatusType">Game is paused.</constant>
-        <constant name="SESSION_UNKNOWN" value="-1" enum="ACSessionType">Unknown session type.</constant>
-        <constant name="SESSION_PRACTICE" value="0" enum="ACSessionType">Practice session.</constant>
-        <constant name="SESSION_QUALIFY" value="1" enum="ACSessionType">Qualifying session.</constant>
-        <constant name="SESSION_RACE" value="2" enum="ACSessionType">Race session.</constant>
-        <constant name="SESSION_HOTLAP" value="3" enum="ACSessionType">Hotlap session.</constant>
-        <constant name="SESSION_TIME_ATTACK" value="4" enum="ACSessionType">Time attack session.</constant>
-        <constant name="SESSION_DRIFT" value="5" enum="ACSessionType">Drift session.</constant>
-        <constant name="SESSION_DRAG" value="6" enum="ACSessionType">Drag race session.</constant>
-        <constant name="FLAG_NONE" value="0" enum="ACFlagType">No flag.</constant>
-        <constant name="FLAG_BLUE" value="1" enum="ACFlagType">Blue flag.</constant>
-        <constant name="FLAG_YELLOW" value="2" enum="ACFlagType">Yellow flag.</constant>
-        <constant name="FLAG_BLACK" value="3" enum="ACFlagType">Black flag.</constant>
-        <constant name="FLAG_WHITE" value="4" enum="ACFlagType">White flag.</constant>
-        <constant name="FLAG_CHECKERED" value="5" enum="ACFlagType">Checkered flag.</constant>
-        <constant name="FLAG_PENALTY" value="6" enum="ACFlagType">Penalty flag.</constant>
+        <constant name="STATUS_OFF" value="0" enum="SimStatusType">Simulation is off.</constant>
+        <constant name="STATUS_REPLAY" value="1" enum="SimStatusType">Simulation is in replay mode.</constant>
+        <constant name="STATUS_LIVE" value="2" enum="SimStatusType">Simulation is running live.</constant>
+        <constant name="STATUS_PAUSE" value="3" enum="SimStatusType">Simulation is paused.</constant>
+        <constant name="SESSION_UNKNOWN" value="-1" enum="SimSessionType">Unknown session type.</constant>
+        <constant name="SESSION_PRACTICE" value="0" enum="SimSessionType">Practice session.</constant>
+        <constant name="SESSION_QUALIFY" value="1" enum="SimSessionType">Qualifying session.</constant>
+        <constant name="SESSION_RACE" value="2" enum="SimSessionType">Race session.</constant>
+        <constant name="SESSION_HOTLAP" value="3" enum="SimSessionType">Hotlap session.</constant>
+        <constant name="SESSION_TIME_ATTACK" value="4" enum="SimSessionType">Time attack session.</constant>
+        <constant name="SESSION_DRIFT" value="5" enum="SimSessionType">Drift session.</constant>
+        <constant name="SESSION_DRAG" value="6" enum="SimSessionType">Drag race session.</constant>
+        <constant name="FLAG_NONE" value="0" enum="SimFlagType">No flag.</constant>
+        <constant name="FLAG_BLUE" value="1" enum="SimFlagType">Blue flag.</constant>
+        <constant name="FLAG_YELLOW" value="2" enum="SimFlagType">Yellow flag.</constant>
+        <constant name="FLAG_BLACK" value="3" enum="SimFlagType">Black flag.</constant>
+        <constant name="FLAG_WHITE" value="4" enum="SimFlagType">White flag.</constant>
+        <constant name="FLAG_CHECKERED" value="5" enum="SimFlagType">Checkered flag.</constant>
+        <constant name="FLAG_PENALTY" value="6" enum="SimFlagType">Penalty flag.</constant>
     </constants>
 </class>

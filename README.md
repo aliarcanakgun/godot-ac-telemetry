@@ -70,7 +70,11 @@ func _exit_tree():
     telemetry.disconnect_from_sim()
 ```
 
-### Public functions & properties:
+### API Reference
+
+#### `SimTelemetryManager`
+The core node managing simulator connections, data logging, and session handling.
+
 * `connect_to_sim(sim_id: String) -> String`: Establishes a connection to a specific simulator (e.g. `"AC"`, `"ACC"`). Use `detect_active_sim()` first to get the active ID. Returns `""` on success or an error string.
 * `detect_active_sim() -> String`: Checks shared memory signatures to detect which simulator is currently running and returns its ID.
 * `disconnect_from_sim() -> void`: Closes all shared memory connections.
@@ -101,8 +105,18 @@ func _exit_tree():
 * `save_file_signature: String`: Property for the signature string written at the beginning of the binary save file (default `"ACTL"`).
 * Signal `connection_lost`: Emitted when the shared memory connection is unexpectedly lost.
 
-### Data & file notes:
-* **Channel-Based Architecture:** Telemetry is organized into `GDLapTelemetry` objects containing channels (arrays of values over time/distance) instead of raw struct snapshots. This makes the data drastically easier to graph and analyze within GDScript.
-* Output file: Contains serialized telemetry channels organized by laps. The entire session is flushed to the binary file only when logging is finished or connection is lost.
-* Supported Sims: Through the modular `ISimProvider` architecture, the extension is built to support multiple simulators. Currently, original Assetto Corsa is fully supported. Support for ACC, AC Evo and iRacing is planned and heavily relies on the new base provider. Additional sims can be easily integrated by writing custom providers.
-* Platform: Current implementation relies on Win32 APIs (OpenFileMapping, MapViewOfFile, FormatMessage, etc.) for high-performance memory sharing and is Windows-only.
+#### `GDLapTelemetry`
+An object holding telemetry data channels for a specific lap or a live snapshot.
+
+* `get_channels() -> Dictionary`: Returns a dictionary containing all telemetry channels. Keys are channel names (e.g. `"physics_speedKmh"`), values are `Array`s of data points.
+* `get_channel_average(channel_name: StringName) -> float`: Returns the calculated average value for the given telemetry channel over the lap.
+
+### Under the Hood & Notes
+* **Modular Multi-Sim Architecture (`ISimProvider`):** The core delegates tasks to isolated provider classes rather than having simulator-specific code hardcoded into the core loops. This makes it straightforward to integrate other simulators without touching core Godot abstractions. Assetto Corsa is fully supported now; ACC, AC Evo, and iRacing support are planned.
+* **Channel-Based Data Storage:** Unlike raw structural snapshots, telemetry is organized logically into `GDLapTelemetry` objects that contain "channels" (distance-series arrays of values). This approach significantly simplifies graphing and analyzing data inside GDScript.
+* **Efficient Output Files:** The binary output file contains serialized telemetry channels chunked by lap. The session writes memory to disk only when finished or abruptly disconnected, keeping disk overhead low.
+* **Platform:** Currently strictly Windows-only due to reliance on Win32 memory sharing APIs (`OpenFileMapping`, `MapViewOfFile`, etc.).
+
+---
+
+**Note:** A more comprehensive documentation / Wiki will be added in the future.
