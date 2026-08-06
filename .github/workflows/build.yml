@@ -20,6 +20,8 @@ jobs:
             arch: x86_64
 
     runs-on: ${{ matrix.os }}
+    env:
+      SCONS_CACHE: ${{ github.workspace }}/.scons-cache/
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,6 +35,16 @@ jobs:
 
       - name: Install SCons
         run: pip install scons
+
+      - name: Setup SCons cache
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache/
+          key: scons-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            scons-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref }}-
+            scons-${{ matrix.platform }}-${{ matrix.arch }}-
+            scons-${{ matrix.platform }}-
 
       - name: Build (debug)
         run: scons platform=${{ matrix.platform }} arch=${{ matrix.arch }} target=template_debug
