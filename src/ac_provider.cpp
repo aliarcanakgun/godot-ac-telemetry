@@ -449,6 +449,9 @@ void ACProvider::close_session() {
 }
 
 String ACProvider::get_internal_channel_name(const String& standard_name) {
+    if (standard_name == "packet_id_physics") return "packetId_physics";
+    if (standard_name == "packet_id_graphic") return "packetId_graphic";
+    
     if (standard_name == "speed") return "speedKmh";
     if (standard_name == "rpm") return "rpms";
     if (standard_name == "throttle") return "gas";
@@ -459,12 +462,10 @@ String ACProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "steer_velocity") return "steerVelo";
     if (standard_name == "combined_pedals") return "gasBrakeCombined";
     if (standard_name == "fuel") return "fuel";
-    if (standard_name == "packet_id_physics") return "packetId_physics";
-    if (standard_name == "packet_id_graphic") return "packetId_graphic";
     
-    if (standard_name == "acc_g_x") return "accG_x";
+    if (standard_name == "lateral_g") return "accG_x";
     if (standard_name == "acc_g_y") return "accG_y";
-    if (standard_name == "acc_g_z") return "accG_z";
+    if (standard_name == "longitudinal_g") return "accG_z";
     if (standard_name == "velocity_x") return "velocity_x";
     if (standard_name == "velocity_y") return "velocity_y";
     if (standard_name == "velocity_z") return "velocity_z";
@@ -472,7 +473,7 @@ String ACProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "local_velocity_y") return "localVelocity_y";
     if (standard_name == "local_velocity_z") return "localVelocity_z";
     if (standard_name == "local_angular_vel_x") return "localAngularVel_x";
-    if (standard_name == "local_angular_vel_y") return "localAngularVel_y";
+    if (standard_name == "yaw_rate") return "localAngularVel_y";
     if (standard_name == "local_angular_vel_z") return "localAngularVel_z";
     
     if (standard_name == "heading") return "heading";
