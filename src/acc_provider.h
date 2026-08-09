@@ -1,16 +1,18 @@
 #pragma once
 
 #include "sim_provider.h"
-#include "ac_data_structs.h"
+#include "acc_data_structs.h"
 #include <godot_cpp/classes/node.hpp>
-#include <windows.h>
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <chrono>
+#include <cstdio>
+#include <windows.h>
 
 namespace godot {
 
-class ACProvider : public ISimProvider {
+class ACCProvider : public ISimProvider {
 private:
     // shared memory handles
     HANDLE hMapPhysics;
@@ -18,9 +20,9 @@ private:
     HANDLE hMapStatic;
 
     // shared memory pointers
-    AC_SPagePhysics* dataPhysics;
-    AC_SPageGraphic* dataGraphic;
-    AC_SPageStatic* dataStatic;
+    ACC_SPagePhysics* dataPhysics;
+    ACC_SPageGraphic* dataGraphic;
+    ACC_SPageStatic* dataStatic;
 
     // logging settings
     double sample_interval = 0.02; // 50 hz
@@ -38,35 +40,37 @@ private:
     String session_output_file_path = "";
 
     // data
-    std::vector<AC_LapDataChannels> sessions_data;
+    std::vector<ACC_LapDataChannels> sessions_data;
     
     // loaded session data
-    std::vector<AC_LapDataChannels> loaded_session_data;
-    AC_SPageStatic loaded_session_static_data;
+    std::vector<ACC_LapDataChannels> loaded_session_data;
+    ACC_SPageStatic loaded_session_static_data;
     double loaded_session_sample_interval = 0.0;
     double loaded_session_samples_per_meter = 0.0;
     int loaded_session_lap_count = -1;
     std::vector<uint64_t> loaded_session_lap_offsets;
 
-    String save_file_signature = "ACTL";
+    String save_file_signature = "ACCT";
 
     std::thread logging_thread;
     std::mutex data_mutex;
 
     void logging_loop();
-    String _open_session_file(const String& file_path, std::ifstream& infile, AC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets);
-    Dictionary _calculate_session_metadata(const AC_SPageStatic& stat, uint64_t count, const std::vector<AC_LapDataChannels>& laps);
-    Dictionary _static_to_dict(const AC_SPageStatic &s);
-    Dictionary _lap_to_dict(const AC_LapDataChannels& c);
+    String _open_session_file(const String& file_path, std::ifstream& infile, ACC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets);
+    Dictionary _calculate_session_metadata(const ACC_SPageStatic& stat, uint64_t count, const std::vector<ACC_LapDataChannels>& laps);
+    Dictionary _static_to_dict(const ACC_SPageStatic &s);
+    Dictionary _lap_to_dict(const ACC_LapDataChannels& c);
 
-    void apply_math_conversions_in_place(AC_LapDataChannels& lap);
+    void apply_math_conversions_in_place(ACC_LapDataChannels& lap);
 
 public:
-    ACProvider();
-    virtual ~ACProvider() override;
+    ACCProvider();
+    virtual ~ACCProvider() override;
     
     static bool check_is_active();
     
+    double get_acc_track_length(const String& track_name) const;
+
     // ISimProvider impl
     virtual godot::String connect_provider() override;
     virtual void disconnect_provider() override;
@@ -100,8 +104,6 @@ public:
     virtual godot::Dictionary calculate_lap_time_delta(const godot::String& target_file_path, int target_lap_index, const godot::String& current_file_path, int current_lap_index, const godot::PackedFloat32Array& reference_positions) override;
 
     virtual godot::String get_internal_channel_name(const godot::String& standard_name) override;
-
-
 };
 
 } // namespace godot

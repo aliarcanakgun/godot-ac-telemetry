@@ -5,12 +5,10 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <vector>
 #include <array>
-
-#ifdef _WIN32
 #include <windows.h>
+
 godot::String win_error_string(DWORD err);
 godot::String wchar_to_gdstring(const wchar_t* wstr, size_t len);
-#endif
 
 void smooth_float_array(godot::PackedFloat32Array& arr, int window_size = 15);
 godot::PackedFloat32Array calc_derivative(const std::vector<float>& values, const std::vector<int32_t>& time_ms, int smoothing_window, float multiplier = 1.0f);

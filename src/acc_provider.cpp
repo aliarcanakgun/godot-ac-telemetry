@@ -1,13 +1,19 @@
-#include "ac_provider.h"
+#include "acc_provider.h"
 #include "helper.h"
 #include <godot_cpp/classes/project_settings.hpp>
 #include <fstream>
 #include <cmath>
+#include <algorithm>
+#include <godot_cpp/variant/utility_functions.hpp>
+#include <cstdio>
+
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 using namespace godot;
 
-ACProvider::ACProvider() {
+ACCProvider::ACCProvider() {
     hMapPhysics = NULL;
     hMapGraphic = NULL;
     hMapStatic = NULL;
@@ -16,7 +22,7 @@ ACProvider::ACProvider() {
     dataStatic = nullptr;
 }
 
-ACProvider::~ACProvider() {
+ACCProvider::~ACCProvider() {
     is_logging = false;
     if (logging_thread.joinable()) {
         logging_thread.join();
@@ -24,7 +30,8 @@ ACProvider::~ACProvider() {
     disconnect_provider();
 }
 
-bool ACProvider::check_is_active() {
+bool ACCProvider::check_is_active() {
+#ifdef _WIN32
     HANDLE hMapStatic = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_static");
     if (hMapStatic) {
         void* map_data = MapViewOfFile(hMapStatic, FILE_MAP_READ, 0, 0, 60);
@@ -32,14 +39,15 @@ bool ACProvider::check_is_active() {
             String smVersion = wchar_to_gdstring((const wchar_t*)map_data, 15);
             UnmapViewOfFile(map_data);
             CloseHandle(hMapStatic);
-            return smVersion.begins_with("1.7"); // can be improved
+            return !smVersion.begins_with("1.7"); // can be improved
         }
         CloseHandle(hMapStatic);
     }
+#endif
     return false;
 }
 
-String ACProvider::connect_provider() {
+String ACCProvider::connect_provider() {
     is_connected_flag = false;
 
     if (dataPhysics) { UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; }
@@ -50,13 +58,13 @@ String ACProvider::connect_provider() {
     hMapPhysics = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_physics");
     if (hMapPhysics == NULL) return "Physics Map Error";
 
-    dataPhysics = (AC_SPagePhysics*)MapViewOfFile(hMapPhysics, FILE_MAP_READ, 0, 0, sizeof(AC_SPagePhysics));
+    dataPhysics = (ACC_SPagePhysics*)MapViewOfFile(hMapPhysics, FILE_MAP_READ, 0, 0, sizeof(ACC_SPagePhysics));
     if (dataPhysics == nullptr) { CloseHandle(hMapPhysics); hMapPhysics = nullptr; return "Physics MapViewOfFile failed"; }
 
     hMapGraphic = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\acpmf_graphics");
     if (hMapGraphic == NULL) { UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; CloseHandle(hMapPhysics); hMapPhysics = nullptr; return "Graphic Map Error"; }
     
-    dataGraphic = (AC_SPageGraphic*)MapViewOfFile(hMapGraphic, FILE_MAP_READ, 0, 0, sizeof(AC_SPageGraphic));
+    dataGraphic = (ACC_SPageGraphic*)MapViewOfFile(hMapGraphic, FILE_MAP_READ, 0, 0, sizeof(ACC_SPageGraphic));
     if (dataGraphic == nullptr) {
         UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; CloseHandle(hMapPhysics); hMapPhysics = nullptr;
         CloseHandle(hMapGraphic); hMapGraphic = nullptr; return "Graphic MapViewOfFile failed";
@@ -68,7 +76,7 @@ String ACProvider::connect_provider() {
         UnmapViewOfFile(dataGraphic); dataGraphic = nullptr; CloseHandle(hMapGraphic); hMapGraphic = nullptr; return "Static Map Error";
     }
     
-    dataStatic = (AC_SPageStatic*)MapViewOfFile(hMapStatic, FILE_MAP_READ, 0, 0, sizeof(AC_SPageStatic));
+    dataStatic = (ACC_SPageStatic*)MapViewOfFile(hMapStatic, FILE_MAP_READ, 0, 0, sizeof(ACC_SPageStatic));
     if (dataStatic == nullptr) {
         UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; CloseHandle(hMapPhysics); hMapPhysics = nullptr;
         UnmapViewOfFile(dataGraphic); dataGraphic = nullptr; CloseHandle(hMapGraphic); hMapGraphic = nullptr;
@@ -79,7 +87,7 @@ String ACProvider::connect_provider() {
     return "";
 }
 
-void ACProvider::disconnect_provider() {
+void ACCProvider::disconnect_provider() {
     stop_capture();
     is_connected_flag = false;
     if (dataPhysics) { UnmapViewOfFile(dataPhysics); dataPhysics = nullptr; }
@@ -90,7 +98,7 @@ void ACProvider::disconnect_provider() {
     if (hMapStatic) { CloseHandle(hMapStatic); hMapStatic = nullptr; }
 }
 
-void ACProvider::update() {
+void ACCProvider::update() {
     if (!is_connected_flag) return;
     if (game_disconnected.load()) {
         game_disconnected.store(false);
@@ -108,7 +116,7 @@ void ACProvider::update() {
     }
 }
 
-String ACProvider::start_capture(const String& output_file_path) {
+String ACCProvider::start_capture(const String& output_file_path) {
     if (output_file_path.is_empty()) return "Output file path is empty.";
     if (is_logging) return "Already logging.";
     session_output_file_path = output_file_path;
@@ -121,19 +129,19 @@ String ACProvider::start_capture(const String& output_file_path) {
     game_disconnected.store(false);
     is_logging = true;
 
-    logging_thread = std::thread(&ACProvider::logging_loop, this);
+    logging_thread = std::thread(&ACCProvider::logging_loop, this);
     return "";
 }
 
-String ACProvider::stop_capture(const String& output_file_path) {
-    if (!is_connected_flag) return "AC is not connected.";
+String ACCProvider::stop_capture(const String& output_file_path) {
+    if (!is_connected_flag) return "ACC is not connected.";
     if (!is_logging) return "Telemetry is not working.";
 
     is_logging = false;
     if (logging_thread.joinable()) {
         logging_thread.join();
     }
-    
+
     std::lock_guard<std::mutex> lock(data_mutex);
 
     // remove empty/junk laps
@@ -166,7 +174,7 @@ String ACProvider::stop_capture(const String& output_file_path) {
     if (outfile.fail()) { outfile.close(); return "Write error"; }
 
     if (!dataStatic) { outfile.close(); return "Static data pointer is null"; }
-    outfile.write(reinterpret_cast<const char*>(dataStatic), sizeof(AC_SPageStatic));
+    outfile.write(reinterpret_cast<const char*>(dataStatic), sizeof(ACC_SPageStatic));
     if (outfile.fail()) { outfile.close(); return "Write error"; }
 
     outfile.write(reinterpret_cast<const char*>(&sample_interval), sizeof(double));
@@ -193,16 +201,16 @@ String ACProvider::stop_capture(const String& output_file_path) {
     return os_path;
 }
 
-bool ACProvider::is_logging_active() const {
+bool ACCProvider::is_logging_active() const {
     return is_logging.load();
 }
 
-int ACProvider::get_provider_status() const {
+int ACCProvider::get_provider_status() const {
     if (!dataGraphic) return 0;
     return dataGraphic->status;
 }
 
-void ACProvider::apply_math_conversions_in_place(AC_LapDataChannels& lap) {
+void ACCProvider::apply_math_conversions_in_place(ACC_LapDataChannels& lap) {
     // transform vectors for godot dict arrays
     
     // pct
@@ -221,6 +229,7 @@ void ACProvider::apply_math_conversions_in_place(AC_LapDataChannels& lap) {
     // rad to deg
     auto to_deg = [](std::vector<float>& v) { for (size_t i=0; i<v.size(); ++i) v[i] *= 57.29578f; };
     to_deg(lap.camberRAD_fl); to_deg(lap.camberRAD_fr); to_deg(lap.camberRAD_rl); to_deg(lap.camberRAD_rr);
+    to_deg(lap.slipAngle_FL); to_deg(lap.slipAngle_FR); to_deg(lap.slipAngle_RL); to_deg(lap.slipAngle_RR);
     to_deg(lap.heading); to_deg(lap.pitch); to_deg(lap.roll);
     to_deg(lap.localAngularVel_x); to_deg(lap.localAngularVel_y); to_deg(lap.localAngularVel_z);
     
@@ -234,7 +243,7 @@ void ACProvider::apply_math_conversions_in_place(AC_LapDataChannels& lap) {
     to_rpm(lap.wheelAngularSpeed_fl); to_rpm(lap.wheelAngularSpeed_fr); to_rpm(lap.wheelAngularSpeed_rl); to_rpm(lap.wheelAngularSpeed_rr);
 }
 
-Dictionary ACProvider::_lap_to_dict(const AC_LapDataChannels& c) {
+Dictionary ACCProvider::_lap_to_dict(const ACC_LapDataChannels& c) {
     Dictionary d;
     // map vectors to godot packed arrays
     d["timestamp"] = to_float_array(c.timestamp);
@@ -385,31 +394,114 @@ Dictionary ACProvider::_lap_to_dict(const AC_LapDataChannels& c) {
     d["windSpeed"] = to_float_array(c.windSpeed);
     d["windDirection"] = to_float_array(c.windDirection);
 
+    // acc physics
+    d["mz_FL"] = to_float_array(c.mz_FL); d["mz_FR"] = to_float_array(c.mz_FR); d["mz_RL"] = to_float_array(c.mz_RL); d["mz_RR"] = to_float_array(c.mz_RR);
+    d["fx_FL"] = to_float_array(c.fx_FL); d["fx_FR"] = to_float_array(c.fx_FR); d["fx_RL"] = to_float_array(c.fx_RL); d["fx_RR"] = to_float_array(c.fx_RR);
+    d["fy_FL"] = to_float_array(c.fy_FL); d["fy_FR"] = to_float_array(c.fy_FR); d["fy_RL"] = to_float_array(c.fy_RL); d["fy_RR"] = to_float_array(c.fy_RR);
+    d["slipRatio_FL"] = to_float_array(c.slipRatio_FL); d["slipRatio_FR"] = to_float_array(c.slipRatio_FR); d["slipRatio_RL"] = to_float_array(c.slipRatio_RL); d["slipRatio_RR"] = to_float_array(c.slipRatio_RR);
+    d["slipAngle_FL"] = to_float_array(c.slipAngle_FL); d["slipAngle_FR"] = to_float_array(c.slipAngle_FR); d["slipAngle_RL"] = to_float_array(c.slipAngle_RL); d["slipAngle_RR"] = to_float_array(c.slipAngle_RR);
+    
+    d["tcinAction"] = to_int_array(c.tcinAction);
+    d["absInAction"] = to_int_array(c.absInAction);
+    
+    d["suspensionDamage_FL"] = to_float_array(c.suspensionDamage_FL); d["suspensionDamage_FR"] = to_float_array(c.suspensionDamage_FR); d["suspensionDamage_RL"] = to_float_array(c.suspensionDamage_RL); d["suspensionDamage_RR"] = to_float_array(c.suspensionDamage_RR);
+    d["tyreTemp_FL"] = to_float_array(c.tyreTemp_FL); d["tyreTemp_FR"] = to_float_array(c.tyreTemp_FR); d["tyreTemp_RL"] = to_float_array(c.tyreTemp_RL); d["tyreTemp_RR"] = to_float_array(c.tyreTemp_RR);
+    d["waterTemp"] = to_float_array(c.waterTemp);
+    
+    d["brakePressure_FL"] = to_float_array(c.brakePressure_FL); d["brakePressure_FR"] = to_float_array(c.brakePressure_FR); d["brakePressure_RL"] = to_float_array(c.brakePressure_RL); d["brakePressure_RR"] = to_float_array(c.brakePressure_RR);
+    d["padLife_FL"] = to_float_array(c.padLife_FL); d["padLife_FR"] = to_float_array(c.padLife_FR); d["padLife_RL"] = to_float_array(c.padLife_RL); d["padLife_RR"] = to_float_array(c.padLife_RR);
+    d["discLife_FL"] = to_float_array(c.discLife_FL); d["discLife_FR"] = to_float_array(c.discLife_FR); d["discLife_RL"] = to_float_array(c.discLife_RL); d["discLife_RR"] = to_float_array(c.discLife_RR);
+    
+    d["kerbVibration"] = to_float_array(c.kerbVibration);
+    d["slipVibrations"] = to_float_array(c.slipVibrations);
+    d["gVibrations"] = to_float_array(c.gVibrations);
+    d["absVibrations"] = to_float_array(c.absVibrations);
+
+    // acc graphic
+    d["packetId"] = to_int_array(c.packetId_graphic);
+    d["activeCars"] = to_int_array(c.activeCars);
+    d["playerCarID"] = to_int_array(c.playerCarID);
+    d["penalty"] = to_int_array(c.penalty);
+    
+    d["TC"] = to_int_array(c.TC);
+    d["TCCUT"] = to_int_array(c.TCCUT);
+    d["EngineMap"] = to_int_array(c.EngineMap);
+    d["ABS"] = to_int_array(c.ABS);
+    d["exhaustTemperature"] = to_float_array(c.exhaustTemperature);
+    d["isSetupMenuVisible"] = to_int_array(c.isSetupMenuVisible);
+    d["mainDisplayIndex"] = to_int_array(c.mainDisplayIndex);
+    d["secondaryDisplyIndex"] = to_int_array(c.secondaryDisplyIndex);
+    d["fuelXLap"] = to_float_array(c.fuelXLap);
+    d["rainLights"] = to_int_array(c.rainLights);
+    d["flashingLights"] = to_int_array(c.flashingLights);
+    d["lightsStage"] = to_int_array(c.lightsStage);
+    d["wiperLV"] = to_int_array(c.wiperLV);
+    d["driverStintTotalTimeLeft"] = to_int_array(c.driverStintTotalTimeLeft);
+    d["driverStintTimeLeft"] = to_int_array(c.driverStintTimeLeft);
+    d["rainTyres"] = to_int_array(c.rainTyres);
+    d["sessionIndex"] = to_int_array(c.sessionIndex);
+    d["usedFuel"] = to_float_array(c.usedFuel);
+    d["deltaLapTime"] = to_string_array(c.deltaLapTime);
+    d["iDeltaLapTime"] = to_int_array(c.iDeltaLapTime);
+    d["estimatedLapTime"] = to_string_array(c.estimatedLapTime);
+    d["iEstimatedLapTime"] = to_int_array(c.iEstimatedLapTime);
+    d["isDeltaPositive"] = to_int_array(c.isDeltaPositive);
+    d["iSplit"] = to_int_array(c.iSplit);
+    d["isValidLap"] = to_int_array(c.isValidLap);
+    d["fuelEstimatedLaps"] = to_float_array(c.fuelEstimatedLaps);
+    d["trackStatus"] = to_string_array(c.trackStatus);
+    d["missingMandatoryPits"] = to_int_array(c.missingMandatoryPits);
+    d["Clock"] = to_float_array(c.Clock);
+    d["directionLightsLeft"] = to_int_array(c.directionLightsLeft);
+    d["directionLightsRight"] = to_int_array(c.directionLightsRight);
+    d["GlobalYellow"] = to_int_array(c.GlobalYellow);
+    d["GlobalYellow1"] = to_int_array(c.GlobalYellow1);
+    d["GlobalYellow2"] = to_int_array(c.GlobalYellow2);
+    d["GlobalYellow3"] = to_int_array(c.GlobalYellow3);
+    d["GlobalWhite"] = to_int_array(c.GlobalWhite);
+    d["GlobalGreen"] = to_int_array(c.GlobalGreen);
+    d["GlobalChequered"] = to_int_array(c.GlobalChequered);
+    d["GlobalRed"] = to_int_array(c.GlobalRed);
+    d["mfdTyreSet"] = to_int_array(c.mfdTyreSet);
+    d["mfdFuelToAdd"] = to_float_array(c.mfdFuelToAdd);
+    d["mfdTyrePressureLF"] = to_float_array(c.mfdTyrePressureLF);
+    d["mfdTyrePressureRF"] = to_float_array(c.mfdTyrePressureRF);
+    d["mfdTyrePressureLR"] = to_float_array(c.mfdTyrePressureLR);
+    d["mfdTyrePressureRR"] = to_float_array(c.mfdTyrePressureRR);
+    d["trackGripStatus"] = to_int_array(c.trackGripStatus);
+    d["rainIntensity"] = to_int_array(c.rainIntensity);
+    d["rainIntensityIn10min"] = to_int_array(c.rainIntensityIn10min);
+    d["rainIntensityIn30min"] = to_int_array(c.rainIntensityIn30min);
+    d["currentTyreSet"] = to_int_array(c.currentTyreSet);
+    d["strategyTyreSet"] = to_int_array(c.strategyTyreSet);
+    d["gapAhead"] = to_int_array(c.gapAhead);
+    d["gapBehind"] = to_int_array(c.gapBehind);
+
     return d;
 }
 
-Dictionary ACProvider::get_live_snapshot() {
+Dictionary ACCProvider::get_live_snapshot() {
     if (!is_connected_flag || !dataPhysics || !dataGraphic || sessions_data.empty()) {
         return Dictionary();
     }
     std::lock_guard<std::mutex> lock(data_mutex);
     
     // copy last lap to prevent modification
-    AC_LapDataChannels lap_copy = sessions_data.back();
+    ACC_LapDataChannels lap_copy = sessions_data.back();
     apply_math_conversions_in_place(lap_copy);
     return _lap_to_dict(lap_copy);
 }
 
-Dictionary ACProvider::get_lap_data(int lap_index) {
+Dictionary ACCProvider::get_lap_data(int lap_index) {
     if (lap_index < 0 || lap_index >= loaded_session_data.size()) {
         return Dictionary();
     }
-    AC_LapDataChannels lap_copy = loaded_session_data[lap_index];
+    ACC_LapDataChannels lap_copy = loaded_session_data[lap_index];
     apply_math_conversions_in_place(lap_copy);
     return _lap_to_dict(lap_copy);
 }
 
-Dictionary ACProvider::get_session_metadata_from_file(const String& file_path) {
+Dictionary ACCProvider::get_session_metadata_from_file(const String& file_path) {
     loaded_session_data.clear();
     loaded_session_lap_offsets.clear();
 
@@ -421,7 +513,7 @@ Dictionary ACProvider::get_session_metadata_from_file(const String& file_path) {
     loaded_session_lap_count = count;
 
     for (int i = 0; i < loaded_session_lap_count; ++i) {
-        AC_LapDataChannels lap_data;
+        ACC_LapDataChannels lap_data;
         infile.seekg(loaded_session_lap_offsets[i]);
         lap_data.read_from_stream(infile);
         if (infile.fail()) {
@@ -451,11 +543,11 @@ Dictionary ACProvider::get_session_metadata_from_file(const String& file_path) {
     return _calculate_session_metadata(loaded_session_static_data, count, loaded_session_data);
 }
 
-Dictionary ACProvider::get_session_metadata() {
+Dictionary ACCProvider::get_session_metadata() {
     return _calculate_session_metadata(loaded_session_static_data, loaded_session_lap_count, loaded_session_data);
 }
 
-void ACProvider::close_session() {
+void ACCProvider::close_session() {
     loaded_session_data.clear();
     loaded_session_data.shrink_to_fit();
     loaded_session_lap_offsets.clear();
@@ -466,7 +558,7 @@ void ACProvider::close_session() {
     loaded_session_static_data = {};
 }
 
-String ACProvider::get_internal_channel_name(const String& standard_name) {
+String ACCProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "packet_id_physics") return "packetId_physics";
     if (standard_name == "packet_id_graphic") return "packetId_graphic";
     
@@ -686,10 +778,124 @@ String ACProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "car_damage_center") return "carDamage_4";
     if (standard_name == "tyres_out") return "numberOfTyresOut";
 
+    // acc mapping
+    if (standard_name == "tc_in_action") return "tcinAction";
+    if (standard_name == "abs_in_action") return "absInAction";
+    if (standard_name == "water_temp") return "waterTemp";
+    if (standard_name == "engine_map") return "EngineMap";
+    if (standard_name == "tc_cut") return "TCCUT";
+    if (standard_name == "exhaust_temp") return "exhaustTemperature";
+    if (standard_name == "active_cars") return "activeCars";
+    if (standard_name == "player_car_id") return "playerCarID";
+    if (standard_name == "penalty") return "penalty";
+    if (standard_name == "is_setup_menu_visible") return "isSetupMenuVisible";
+    if (standard_name == "main_display_index") return "mainDisplayIndex";
+    if (standard_name == "secondary_display_index") return "secondaryDisplyIndex";
+    if (standard_name == "fuel_x_lap") return "fuelXLap";
+    if (standard_name == "rain_lights") return "rainLights";
+    if (standard_name == "flashing_lights") return "flashingLights";
+    if (standard_name == "lights_stage") return "lightsStage";
+    if (standard_name == "wiper_lv") return "wiperLV";
+    if (standard_name == "driver_stint_total_time_left") return "driverStintTotalTimeLeft";
+    if (standard_name == "driver_stint_time_left") return "driverStintTimeLeft";
+    if (standard_name == "rain_tyres") return "rainTyres";
+    if (standard_name == "session_index") return "sessionIndex";
+    if (standard_name == "used_fuel") return "usedFuel";
+    if (standard_name == "delta_lap_time") return "deltaLapTime";
+    if (standard_name == "i_delta_lap_time") return "iDeltaLapTime";
+    if (standard_name == "estimated_lap_time") return "estimatedLapTime";
+    if (standard_name == "i_estimated_lap_time") return "iEstimatedLapTime";
+    if (standard_name == "is_delta_positive") return "isDeltaPositive";
+    if (standard_name == "i_split") return "iSplit";
+    if (standard_name == "is_valid_lap") return "isValidLap";
+    if (standard_name == "fuel_estimated_laps") return "fuelEstimatedLaps";
+    if (standard_name == "track_status") return "trackStatus";
+    if (standard_name == "missing_mandatory_pits") return "missingMandatoryPits";
+    if (standard_name == "clock") return "Clock";
+    if (standard_name == "direction_lights_left") return "directionLightsLeft";
+    if (standard_name == "direction_lights_right") return "directionLightsRight";
+    if (standard_name == "global_yellow") return "GlobalYellow";
+    if (standard_name == "global_yellow1") return "GlobalYellow1";
+    if (standard_name == "global_yellow2") return "GlobalYellow2";
+    if (standard_name == "global_yellow3") return "GlobalYellow3";
+    if (standard_name == "global_white") return "GlobalWhite";
+    if (standard_name == "global_green") return "GlobalGreen";
+    if (standard_name == "global_chequered") return "GlobalChequered";
+    if (standard_name == "global_red") return "GlobalRed";
+    if (standard_name == "mfd_tyre_set") return "mfdTyreSet";
+    if (standard_name == "mfd_fuel_to_add") return "mfdFuelToAdd";
+    if (standard_name == "mfd_tyre_pressure_lf") return "mfdTyrePressureLF";
+    if (standard_name == "mfd_tyre_pressure_rf") return "mfdTyrePressureRF";
+    if (standard_name == "mfd_tyre_pressure_lr") return "mfdTyrePressureLR";
+    if (standard_name == "mfd_tyre_pressure_rr") return "mfdTyrePressureRR";
+    if (standard_name == "track_grip_status") return "trackGripStatus";
+    if (standard_name == "rain_intensity") return "rainIntensity";
+    if (standard_name == "rain_intensity_in_10min") return "rainIntensityIn10min";
+    if (standard_name == "rain_intensity_in_30min") return "rainIntensityIn30min";
+    if (standard_name == "current_tyre_set") return "currentTyreSet";
+    if (standard_name == "strategy_tyre_set") return "strategyTyreSet";
+    if (standard_name == "gap_ahead") return "gapAhead";
+    if (standard_name == "gap_behind") return "gapBehind";
+
+    if (standard_name == "mz_fl") return "mz_FL";
+    if (standard_name == "mz_fr") return "mz_FR";
+    if (standard_name == "mz_rl") return "mz_RL";
+    if (standard_name == "mz_rr") return "mz_RR";
+
+    if (standard_name == "fx_fl") return "fx_FL";
+    if (standard_name == "fx_fr") return "fx_FR";
+    if (standard_name == "fx_rl") return "fx_RL";
+    if (standard_name == "fx_rr") return "fx_RR";
+
+    if (standard_name == "fy_fl") return "fy_FL";
+    if (standard_name == "fy_fr") return "fy_FR";
+    if (standard_name == "fy_rl") return "fy_RL";
+    if (standard_name == "fy_rr") return "fy_RR";
+
+    if (standard_name == "slip_ratio_fl") return "slipRatio_FL";
+    if (standard_name == "slip_ratio_fr") return "slipRatio_FR";
+    if (standard_name == "slip_ratio_rl") return "slipRatio_RL";
+    if (standard_name == "slip_ratio_rr") return "slipRatio_RR";
+
+    if (standard_name == "slip_angle_fl") return "slipAngle_FL";
+    if (standard_name == "slip_angle_fr") return "slipAngle_FR";
+    if (standard_name == "slip_angle_rl") return "slipAngle_RL";
+    if (standard_name == "slip_angle_rr") return "slipAngle_RR";
+
+    if (standard_name == "susp_damage_fl") return "suspensionDamage_FL";
+    if (standard_name == "susp_damage_fr") return "suspensionDamage_FR";
+    if (standard_name == "susp_damage_rl") return "suspensionDamage_RL";
+    if (standard_name == "susp_damage_rr") return "suspensionDamage_RR";
+
+    if (standard_name == "tyre_temp_fl") return "tyreTemp_FL";
+    if (standard_name == "tyre_temp_fr") return "tyreTemp_FR";
+    if (standard_name == "tyre_temp_rl") return "tyreTemp_RL";
+    if (standard_name == "tyre_temp_rr") return "tyreTemp_RR";
+
+    if (standard_name == "brake_pressure_fl") return "brakePressure_FL";
+    if (standard_name == "brake_pressure_fr") return "brakePressure_FR";
+    if (standard_name == "brake_pressure_rl") return "brakePressure_RL";
+    if (standard_name == "brake_pressure_rr") return "brakePressure_RR";
+
+    if (standard_name == "pad_life_fl") return "padLife_FL";
+    if (standard_name == "pad_life_fr") return "padLife_FR";
+    if (standard_name == "pad_life_rl") return "padLife_RL";
+    if (standard_name == "pad_life_rr") return "padLife_RR";
+
+    if (standard_name == "disc_life_fl") return "discLife_FL";
+    if (standard_name == "disc_life_fr") return "discLife_FR";
+    if (standard_name == "disc_life_rl") return "discLife_RL";
+    if (standard_name == "disc_life_rr") return "discLife_RR";
+
+    if (standard_name == "kerb_vibration") return "kerbVibration";
+    if (standard_name == "slip_vibrations") return "slipVibrations";
+    if (standard_name == "g_vibrations") return "gVibrations";
+    if (standard_name == "abs_vibrations") return "absVibrations";
+
     return standard_name; // fallback
 }
 
-String ACProvider::_open_session_file(const String& file_path, std::ifstream& infile, AC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets) {
+String ACCProvider::_open_session_file(const String& file_path, std::ifstream& infile, ACC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets) {
     if (file_path.is_empty()) return "file path is empty";
 
     String os_path = file_path;
@@ -715,7 +921,7 @@ String ACProvider::_open_session_file(const String& file_path, std::ifstream& in
     }
 
     // read static data
-    if (infile.read(reinterpret_cast<char*>(&out_static), sizeof(AC_SPageStatic)).fail()) {
+    if (infile.read(reinterpret_cast<char*>(&out_static), sizeof(ACC_SPageStatic)).fail()) {
         infile.close(); return "failed reading static data";
     }
     
@@ -745,7 +951,7 @@ String ACProvider::_open_session_file(const String& file_path, std::ifstream& in
     return "";
 }
 
-Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, uint64_t count, const std::vector<AC_LapDataChannels>& laps) {
+Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat, uint64_t count, const std::vector<ACC_LapDataChannels>& laps) {
     Dictionary meta;
 
     meta["track_name"] = wchar_to_gdstring(stat.track, 33).to_lower();
@@ -760,7 +966,7 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
     Dictionary sector_positions_m;
 
     for (uint64_t i = 0; i < count; i++) {
-        const AC_LapDataChannels& lap = laps[i];
+        const ACC_LapDataChannels& lap = laps[i];
 
         if (lap.speedKmh.empty()) continue;
 
@@ -811,7 +1017,7 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
         int next_lap_best_time = 0;
         // try getting exact time from next lap if exists
         if (i + 1 < count) {
-            const AC_LapDataChannels& next_lap = laps[i + 1];
+            const ACC_LapDataChannels& next_lap = laps[i + 1];
             
             if (!next_lap.iBestTime.empty()) {
                 next_lap_best_time = next_lap.iBestTime[0];
@@ -897,10 +1103,10 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
     return meta;
 }
 
-Dictionary ACProvider::_static_to_dict(const AC_SPageStatic &s) {
+Dictionary ACCProvider::_static_to_dict(const ACC_SPageStatic &s) {
     Dictionary dict;
     
-    // raw ac keys
+    // raw acc keys
     dict["smVersion"] = wchar_to_gdstring(s.smVersion, 15);
     dict["acVersion"] = wchar_to_gdstring(s.acVersion, 15);
     dict["numberOfSessions"] = s.numberOfSessions;
@@ -936,20 +1142,58 @@ Dictionary ACProvider::_static_to_dict(const AC_SPageStatic &s) {
     dict["pitWindowStart"] = s.pitWindowStart;
     dict["pitWindowEnd"] = s.pitWindowEnd;
     dict["isOnline"] = s.isOnline;
+    dict["dryTyresName"] = wchar_to_gdstring(s.dryTyresName, 33);
+    dict["wetTyresName"] = wchar_to_gdstring(s.wetTyresName, 33);
 
     // standard multi-sim keys
     // TODO: it can be expanded later
     dict["car_model"] = wchar_to_gdstring(s.carModel, 33);
     dict["track_name"] = wchar_to_gdstring(s.track, 33).to_lower();
     dict["track_config"] = wchar_to_gdstring(s.trackConfiguration, 33);
-    dict["track_length"] = s.trackSPlineLength;
+    dict["track_length"] = get_acc_track_length(dict["track_name"]);
     dict["max_rpm"] = s.maxRpm;
     dict["sector_count"] = s.sectorCount;
-
+    
     return dict;
 }
 
-void ACProvider::logging_loop() {
+double ACCProvider::get_acc_track_length(const String& track_name) const {
+    if (track_name == "barcelona") return 4655.0;
+    if (track_name == "brands_hatch") return 3908.0;
+    if (track_name == "hungaroring") return 4381.0;
+    if (track_name == "misano") return 4226.0;
+    if (track_name == "monza") return 5793.0;
+    if (track_name == "nurburgring") return 5137.0;
+    if (track_name == "paul_ricard") return 5770.0;
+    if (track_name == "silverstone") return 5891.0;
+    if (track_name == "spa") return 7004.0;
+    if (track_name == "zandvoort") return 4252.0;
+    if (track_name == "zolder") return 4011.0;
+
+    if (track_name == "imola") return 4959.0;
+    if (track_name == "donington") return 4020.0;
+    if (track_name == "oulton_park") return 4307.0;
+    if (track_name == "snetterton") return 4779.0;
+    if (track_name == "kyalami") return 4522.0;
+    if (track_name == "laguna_seca") return 3602.0;
+    if (track_name == "mount_panorama") return 6213.0;
+    if (track_name == "suzuka") return 5807.0;
+    if (track_name == "cota") return 5513.0;
+    if (track_name == "indianapolis") return 4167.0;
+    if (track_name == "watkins_glen") return 5552.0;
+    if (track_name == "valencia") return 4005.0;
+    if (track_name == "red_bull_ring") return 4318.0;
+    if (track_name == "nuerburgring_24h") return 25300.0;
+
+    // fallback if somehow acc provides it
+    if (dataStatic && dataStatic->trackSPlineLength > 0.0) {
+        return dataStatic->trackSPlineLength;
+    }
+    
+    return 0.0;
+}
+
+void ACCProvider::logging_loop() {
     auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(sample_interval));
     auto next_tick = std::chrono::steady_clock::now();
 
@@ -959,6 +1203,9 @@ void ACProvider::logging_loop() {
     int graphic_stale_counter = 0;
     int local_last_graphic_packet_id = -1;
     int max_stale_ticks = static_cast<int>(3.0 / sample_interval); // 3 secs timeout
+
+    wchar_t cached_track[33] = {0};
+    double current_track_length = 0.0;
 
     while (is_logging) {
         auto now = std::chrono::steady_clock::now();
@@ -986,7 +1233,14 @@ void ACProvider::logging_loop() {
             }
             local_last_graphic_packet_id = dataGraphic->packetId;
             
-            
+            if (dataStatic) {
+                if (wcsncmp(dataStatic->track, cached_track, 33) != 0) {
+                    for (int i = 0; i < 33; ++i) cached_track[i] = dataStatic->track[i];
+                    current_track_length = get_acc_track_length(wchar_to_gdstring(cached_track, 33).to_lower());
+                }
+            }
+
+            // physics stale check         
             if (dataGraphic->status != AC_LIVE) {
                 stale_counter = 0;
                 std::this_thread::sleep_until(next_tick);
@@ -1036,7 +1290,7 @@ void ACProvider::logging_loop() {
                     }
 
                     if (should_push) {
-                        sessions_data.push_back(AC_LapDataChannels());
+                        sessions_data.push_back(ACC_LapDataChannels());
                     } else {
                         sessions_data.back().clear();
                     }
@@ -1054,22 +1308,22 @@ void ACProvider::logging_loop() {
                     internal_meter = -1.0; // reset on new lap
                 }
                 
-                double graphic_spline_pos = dataGraphic->normalizedCarPosition * dataStatic->trackSPlineLength;
+                double graphic_spline_pos = dataGraphic->normalizedCarPosition * current_track_length;
                 
-                if (internal_meter < 0.0 || dataStatic->trackSPlineLength <= 0.0) {
+                if (internal_meter < 0.0 || current_track_length <= 0.0) {
                     internal_meter = graphic_spline_pos;
                 } else {
                     int packet_diff = dataPhysics->packetId - last_physics_packet_id;
                     if (packet_diff > 0 && packet_diff < 100) {
-                        double dt = packet_diff / 333.333333333; // 333Hz physics tick
+                        double dt = packet_diff / 400.0; // 400Hz physics tick
                         internal_meter += (dataPhysics->speedKmh / 3.6) * dt;
                     }
                     
                     // complementary filter: soft-correct towards graphic_spline_pos
                     double diff = graphic_spline_pos - internal_meter;
                     // handle track wrap-around
-                    if (diff < -dataStatic->trackSPlineLength / 2.0) diff += dataStatic->trackSPlineLength;
-                    if (diff > dataStatic->trackSPlineLength / 2.0) diff -= dataStatic->trackSPlineLength;
+                    if (diff < -current_track_length / 2.0) diff += current_track_length;
+                    if (diff > current_track_length / 2.0) diff -= current_track_length;
                     
                     if (std::abs(diff) < 20.0) {
                         internal_meter += diff * 0.05; // 5% correction per tick
@@ -1078,9 +1332,9 @@ void ACProvider::logging_loop() {
                     }
                 }
                 
-                if (dataStatic->trackSPlineLength > 0.0) {
-                    while (internal_meter >= dataStatic->trackSPlineLength) internal_meter -= dataStatic->trackSPlineLength;
-                    while (internal_meter < 0.0) internal_meter += dataStatic->trackSPlineLength;
+                if (current_track_length > 0.0) {
+                    while (internal_meter >= current_track_length) internal_meter -= current_track_length;
+                    while (internal_meter < 0.0) internal_meter += current_track_length;
                 }
 
                 double spline_pos = internal_meter;
@@ -1089,10 +1343,10 @@ void ACProvider::logging_loop() {
                 if (last_recorded_meter >= 0.0) {
                     dist_diff = spline_pos - last_recorded_meter;
                     // fix distance jump when track spline loops
-                    if (dist_diff < -dataStatic->trackSPlineLength / 2.0) {
-                        dist_diff += dataStatic->trackSPlineLength;
-                    } else if (dist_diff > dataStatic->trackSPlineLength / 2.0) {
-                        dist_diff -= dataStatic->trackSPlineLength;
+                    if (dist_diff < -current_track_length / 2.0) {
+                        dist_diff += current_track_length;
+                    } else if (dist_diff > current_track_length / 2.0) {
+                        dist_diff -= current_track_length;
                     }
                 }
                 
@@ -1112,8 +1366,8 @@ void ACProvider::logging_loop() {
                         // handle teleport jumps (session restart, pit return, etc..)
                         // if the distance jumped is too large in a single frame
                         // we don't try to interpolate all the way back (cuz that jump is impossible)
-                        if (jump_size > 20.0 && dataStatic->trackSPlineLength > 0.0 && 
-                            jump_size < dataStatic->trackSPlineLength - 20.0) {
+                        if (jump_size > 20.0 && current_track_length > 0.0 && 
+                            jump_size < current_track_length - 20.0) {
                             last_recorded_meter = current_meter;
                         } else {
                             direction = (current_meter > last_recorded_meter) ? 1.0 : -1.0;
@@ -1147,7 +1401,7 @@ void ACProvider::logging_loop() {
                     if (!lap.timestamp.empty() && old_last_recorded_meter >= 0.0) {
                         int packet_diff = dataPhysics->packetId - lap.packetId_physics.back();
                         if (packet_diff > 0 && packet_diff < 1000) {
-                            double dt = packet_diff * (1.0 / 333.333333333); // ac physics is 333hz
+                            double dt = packet_diff * (1.0 / 333.333333333); // acc physics is 333hz
                             smoothed_timestamp = lap.timestamp.back() + dt;
                             smoothed_iCurrentTime = lap.iCurrentTime.back() + static_cast<int32_t>(dt * 1000.0);
                         }
@@ -1165,6 +1419,14 @@ void ACProvider::logging_loop() {
                     lap.replayTimeMultiplier.push_back(dataGraphic->replayTimeMultiplier);
                     lap.numberOfLaps.push_back(dataGraphic->numberOfLaps);
                     lap.completedLaps.push_back(dataGraphic->completedLaps);
+                    
+                    lap.status.push_back(dataGraphic->status);
+                    lap.session.push_back(dataGraphic->session);
+                    lap.position.push_back(dataGraphic->position);
+                    lap.sessionTimeLeft.push_back(dataGraphic->sessionTimeLeft);
+                    lap.isInPit.push_back(dataGraphic->isInPit);
+                    lap.currentSectorIndex.push_back(dataGraphic->currentSectorIndex);
+                    lap.lastSectorTime.push_back(dataGraphic->lastSectorTime);
                     
                     // graphic strings
                     auto push_str = [](auto& target_vec, const wchar_t* src, size_t size) {
@@ -1350,6 +1612,67 @@ void ACProvider::logging_loop() {
                     lap.carDamage_4.push_back(dataPhysics->carDamage[4]);
                     lap.numberOfTyresOut.push_back(dataPhysics->numberOfTyresOut);
 
+                    // acc physics
+                    lap.mz_FL.push_back(dataPhysics->mz[0]);
+                    lap.mz_FR.push_back(dataPhysics->mz[1]);
+                    lap.mz_RL.push_back(dataPhysics->mz[2]);
+                    lap.mz_RR.push_back(dataPhysics->mz[3]);
+
+                    lap.fx_FL.push_back(dataPhysics->fx[0]);
+                    lap.fx_FR.push_back(dataPhysics->fx[1]);
+                    lap.fx_RL.push_back(dataPhysics->fx[2]);
+                    lap.fx_RR.push_back(dataPhysics->fx[3]);
+
+                    lap.fy_FL.push_back(dataPhysics->fy[0]);
+                    lap.fy_FR.push_back(dataPhysics->fy[1]);
+                    lap.fy_RL.push_back(dataPhysics->fy[2]);
+                    lap.fy_RR.push_back(dataPhysics->fy[3]);
+
+                    lap.slipRatio_FL.push_back(dataPhysics->slipRatio[0]);
+                    lap.slipRatio_FR.push_back(dataPhysics->slipRatio[1]);
+                    lap.slipRatio_RL.push_back(dataPhysics->slipRatio[2]);
+                    lap.slipRatio_RR.push_back(dataPhysics->slipRatio[3]);
+
+                    lap.slipAngle_FL.push_back(dataPhysics->slipAngle[0]);
+                    lap.slipAngle_FR.push_back(dataPhysics->slipAngle[1]);
+                    lap.slipAngle_RL.push_back(dataPhysics->slipAngle[2]);
+                    lap.slipAngle_RR.push_back(dataPhysics->slipAngle[3]);
+
+                    lap.tcinAction.push_back(dataPhysics->tcinAction);
+                    lap.absInAction.push_back(dataPhysics->absInAction);
+
+                    lap.suspensionDamage_FL.push_back(dataPhysics->suspensionDamage[0]);
+                    lap.suspensionDamage_FR.push_back(dataPhysics->suspensionDamage[1]);
+                    lap.suspensionDamage_RL.push_back(dataPhysics->suspensionDamage[2]);
+                    lap.suspensionDamage_RR.push_back(dataPhysics->suspensionDamage[3]);
+
+                    lap.tyreTemp_FL.push_back(dataPhysics->tyreTemp[0]);
+                    lap.tyreTemp_FR.push_back(dataPhysics->tyreTemp[1]);
+                    lap.tyreTemp_RL.push_back(dataPhysics->tyreTemp[2]);
+                    lap.tyreTemp_RR.push_back(dataPhysics->tyreTemp[3]);
+
+                    lap.waterTemp.push_back(dataPhysics->waterTemp);
+
+                    lap.brakePressure_FL.push_back(dataPhysics->brakePressure[0]);
+                    lap.brakePressure_FR.push_back(dataPhysics->brakePressure[1]);
+                    lap.brakePressure_RL.push_back(dataPhysics->brakePressure[2]);
+                    lap.brakePressure_RR.push_back(dataPhysics->brakePressure[3]);
+
+                    lap.padLife_FL.push_back(dataPhysics->padLife[0]);
+                    lap.padLife_FR.push_back(dataPhysics->padLife[1]);
+                    lap.padLife_RL.push_back(dataPhysics->padLife[2]);
+                    lap.padLife_RR.push_back(dataPhysics->padLife[3]);
+
+                    lap.discLife_FL.push_back(dataPhysics->discLife[0]);
+                    lap.discLife_FR.push_back(dataPhysics->discLife[1]);
+                    lap.discLife_RL.push_back(dataPhysics->discLife[2]);
+                    lap.discLife_RR.push_back(dataPhysics->discLife[3]);
+
+                    lap.kerbVibration.push_back(dataPhysics->kerbVibration);
+                    lap.slipVibrations.push_back(dataPhysics->slipVibrations);
+                    lap.gVibrations.push_back(dataPhysics->gVibrations);
+                    lap.absVibrations.push_back(dataPhysics->absVibrations);
+
                     // graphic
                     lap.status.push_back(dataGraphic->status);
                     lap.session.push_back(dataGraphic->session);
@@ -1358,17 +1681,87 @@ void ACProvider::logging_loop() {
                     lap.isInPit.push_back(dataGraphic->isInPit);
                     lap.currentSectorIndex.push_back(dataGraphic->currentSectorIndex);
                     lap.lastSectorTime.push_back(dataGraphic->lastSectorTime);
-                    lap.carCoordinates_x.push_back(dataGraphic->carCoordinates[0]);
-                    lap.carCoordinates_y.push_back(dataGraphic->carCoordinates[1]);
-                    lap.carCoordinates_z.push_back(dataGraphic->carCoordinates[2]);
+
+                    int player_id = (dataGraphic->playerCarID >= 0 && dataGraphic->playerCarID < 60) ? dataGraphic->playerCarID : 0;
+                    lap.carCoordinates_x.push_back(dataGraphic->carCoordinates[player_id][0]);
+                    lap.carCoordinates_y.push_back(dataGraphic->carCoordinates[player_id][1]);
+                    lap.carCoordinates_z.push_back(dataGraphic->carCoordinates[player_id][2]);
+
+                    std::array<std::array<float, 3>, 60> coords_arr;
+                    std::memcpy(coords_arr.data(), dataGraphic->carCoordinates, sizeof(coords_arr));
+                    lap.carCoordinates.push_back(coords_arr);
+
+                    std::array<int, 60> car_id_arr;
+                    std::memcpy(car_id_arr.data(), dataGraphic->carID, sizeof(car_id_arr));
+                    lap.carID.push_back(car_id_arr);
+
+                    lap.activeCars.push_back(dataGraphic->activeCars);
+                    lap.playerCarID.push_back(dataGraphic->playerCarID);
                     lap.penaltyTime.push_back(dataGraphic->penaltyTime);
                     lap.flag.push_back(dataGraphic->flag);
+                    lap.penalty.push_back(dataGraphic->penalty);
                     lap.idealLineOn.push_back(dataGraphic->idealLineOn);
                     lap.isInPitLane.push_back(dataGraphic->isInPitLane);
                     lap.surfaceGrip.push_back(dataGraphic->surfaceGrip);
                     lap.mandatoryPitDone.push_back(dataGraphic->mandatoryPitDone);
                     lap.windSpeed.push_back(dataGraphic->windSpeed);
                     lap.windDirection.push_back(dataGraphic->windDirection);
+
+                    lap.TC.push_back(dataGraphic->TC);
+                    lap.TCCUT.push_back(dataGraphic->TCCUT);
+                    lap.EngineMap.push_back(dataGraphic->EngineMap);
+                    lap.ABS.push_back(dataGraphic->ABS);
+                    lap.exhaustTemperature.push_back(dataGraphic->exhaustTemperature);
+
+                    lap.isSetupMenuVisible.push_back(dataGraphic->isSetupMenuVisible);
+                    lap.mainDisplayIndex.push_back(dataGraphic->mainDisplayIndex);
+                    lap.secondaryDisplyIndex.push_back(dataGraphic->secondaryDisplyIndex);
+                    lap.fuelXLap.push_back(dataGraphic->fuelXLap);
+                    lap.rainLights.push_back(dataGraphic->rainLights);
+                    lap.flashingLights.push_back(dataGraphic->flashingLights);
+                    lap.lightsStage.push_back(dataGraphic->lightsStage);
+                    lap.wiperLV.push_back(dataGraphic->wiperLV);
+                    lap.driverStintTotalTimeLeft.push_back(dataGraphic->driverStintTotalTimeLeft);
+                    lap.driverStintTimeLeft.push_back(dataGraphic->driverStintTimeLeft);
+                    lap.rainTyres.push_back(dataGraphic->rainTyres);
+                    lap.sessionIndex.push_back(dataGraphic->sessionIndex);
+                    lap.usedFuel.push_back(dataGraphic->usedFuel);
+
+                    push_str(lap.deltaLapTime, dataGraphic->deltaLapTime, 15);
+                    lap.iDeltaLapTime.push_back(dataGraphic->iDeltaLapTime);
+                    push_str(lap.estimatedLapTime, dataGraphic->estimatedLapTime, 15);
+                    lap.iEstimatedLapTime.push_back(dataGraphic->iEstimatedLapTime);
+                    lap.isDeltaPositive.push_back(dataGraphic->isDeltaPositive);
+                    lap.iSplit.push_back(dataGraphic->iSplit);
+                    lap.isValidLap.push_back(dataGraphic->isValidLap);
+                    lap.fuelEstimatedLaps.push_back(dataGraphic->fuelEstimatedLaps);
+                    push_str(lap.trackStatus, dataGraphic->trackStatus, 33);
+                    lap.missingMandatoryPits.push_back(dataGraphic->missingMandatoryPits);
+                    lap.Clock.push_back(dataGraphic->Clock);
+                    lap.directionLightsLeft.push_back(dataGraphic->directionLightsLeft);
+                    lap.directionLightsRight.push_back(dataGraphic->directionLightsRight);
+                    lap.GlobalYellow.push_back(dataGraphic->GlobalYellow);
+                    lap.GlobalYellow1.push_back(dataGraphic->GlobalYellow1);
+                    lap.GlobalYellow2.push_back(dataGraphic->GlobalYellow2);
+                    lap.GlobalYellow3.push_back(dataGraphic->GlobalYellow3);
+                    lap.GlobalWhite.push_back(dataGraphic->GlobalWhite);
+                    lap.GlobalGreen.push_back(dataGraphic->GlobalGreen);
+                    lap.GlobalChequered.push_back(dataGraphic->GlobalChequered);
+                    lap.GlobalRed.push_back(dataGraphic->GlobalRed);
+                    lap.mfdTyreSet.push_back(dataGraphic->mfdTyreSet);
+                    lap.mfdFuelToAdd.push_back(dataGraphic->mfdFuelToAdd);
+                    lap.mfdTyrePressureLF.push_back(dataGraphic->mfdTyrePressureLF);
+                    lap.mfdTyrePressureRF.push_back(dataGraphic->mfdTyrePressureRF);
+                    lap.mfdTyrePressureLR.push_back(dataGraphic->mfdTyrePressureLR);
+                    lap.mfdTyrePressureRR.push_back(dataGraphic->mfdTyrePressureRR);
+                    lap.trackGripStatus.push_back(dataGraphic->trackGripStatus);
+                    lap.rainIntensity.push_back(dataGraphic->rainIntensity);
+                    lap.rainIntensityIn10min.push_back(dataGraphic->rainIntensityIn10min);
+                    lap.rainIntensityIn30min.push_back(dataGraphic->rainIntensityIn30min);
+                    lap.currentTyreSet.push_back(dataGraphic->currentTyreSet);
+                    lap.strategyTyreSet.push_back(dataGraphic->strategyTyreSet);
+                    lap.gapAhead.push_back(dataGraphic->gapAhead);
+                    lap.gapBehind.push_back(dataGraphic->gapBehind);
                 }
             }
         }
@@ -1381,7 +1774,7 @@ void ACProvider::logging_loop() {
 
 #pragma comment(lib, "winmm.lib")
 
-String ACProvider::load_session(const String& file_path) {
+String ACCProvider::load_session(const String& file_path) {
     loaded_session_data.clear();
     loaded_session_lap_offsets.clear();
 
@@ -1393,7 +1786,7 @@ String ACProvider::load_session(const String& file_path) {
     loaded_session_lap_count = count;
 
     for (int i = 0; i < loaded_session_lap_count; ++i) {
-        AC_LapDataChannels lap_data;
+        ACC_LapDataChannels lap_data;
         infile.seekg(loaded_session_lap_offsets[i]);
         lap_data.read_from_stream(infile);
         if (infile.fail()) {
@@ -1425,16 +1818,16 @@ String ACProvider::load_session(const String& file_path) {
     return "";
 }
 
-Dictionary ACProvider::get_live_static_data() {
+Dictionary ACCProvider::get_live_static_data() {
     if (!is_connected_flag || !dataStatic) return Dictionary();
     return _static_to_dict(*dataStatic);
 }
 
-Dictionary ACProvider::get_loaded_session_static_data() {
+Dictionary ACCProvider::get_loaded_session_static_data() {
     return _static_to_dict(loaded_session_static_data);
 }
 
-double ACProvider::get_loaded_session_lap_fuel_consumption(int lap_index) {
+double ACCProvider::get_loaded_session_lap_fuel_consumption(int lap_index) {
     if (lap_index < 0 || lap_index >= loaded_session_data.size()) return 0.0;
     const auto &lap = loaded_session_data[lap_index];
     if (lap.fuel.empty()) return 0.0;
@@ -1451,7 +1844,7 @@ double ACProvider::get_loaded_session_lap_fuel_consumption(int lap_index) {
     return consumed;
 }
 
-double ACProvider::get_loaded_session_total_fuel_consumption() {
+double ACCProvider::get_loaded_session_total_fuel_consumption() {
     double total = 0.0;
     for (int i = 0; i < loaded_session_data.size(); i++) {
         total += get_loaded_session_lap_fuel_consumption(i);
@@ -1459,7 +1852,7 @@ double ACProvider::get_loaded_session_total_fuel_consumption() {
     return total;
 }
 
-double ACProvider::get_loaded_session_total_laps() {
+double ACCProvider::get_loaded_session_total_laps() {
     double total_driven_fraction = 0.0;
     bool has_prev = false;
     double prev_pos = 0.0;
@@ -1495,7 +1888,7 @@ double ACProvider::get_loaded_session_total_laps() {
     return total_driven_fraction;
 }
 
-Dictionary ACProvider::get_loaded_session_lap_stats(int lap_index) {
+Dictionary ACCProvider::get_loaded_session_lap_stats(int lap_index) {
     Dictionary stats;
     if (lap_index < 0 || lap_index >= loaded_session_data.size()) return stats;
 
@@ -1572,7 +1965,7 @@ Dictionary ACProvider::get_loaded_session_lap_stats(int lap_index) {
     return stats;
 }
 
-Dictionary ACProvider::calculate_lap_time_delta(const String& target_file_path, int target_lap_index, const String& current_file_path, int current_lap_index, const PackedFloat32Array& reference_positions) {
+Dictionary ACCProvider::calculate_lap_time_delta(const String& target_file_path, int target_lap_index, const String& current_file_path, int current_lap_index, const PackedFloat32Array& reference_positions) {
     PackedFloat32Array cumulative_delta;
     Dictionary result;
     result["cumulative_delta"] = PackedFloat32Array();
@@ -1584,9 +1977,9 @@ Dictionary ACProvider::calculate_lap_time_delta(const String& target_file_path, 
 
     double session_spm = 1.0;
 
-    auto load_lap = [this, &session_spm](String file_path, int lap_index, AC_LapDataChannels &out_lap) -> bool {
+    auto load_lap = [this, &session_spm](String file_path, int lap_index, ACC_LapDataChannels &out_lap) -> bool {
         std::ifstream infile;
-        AC_SPageStatic stat;
+        ACC_SPageStatic stat;
         double interval, spm;
         uint64_t count;
         std::vector<uint64_t> offsets;
@@ -1604,7 +1997,7 @@ Dictionary ACProvider::calculate_lap_time_delta(const String& target_file_path, 
         return true;
     };
 
-    AC_LapDataChannels target_lap, current_lap;
+    ACC_LapDataChannels target_lap, current_lap;
     if (!load_lap(target_file_path, target_lap_index, target_lap)) return result;
     
     if (actual_curr_path == target_file_path && current_lap_index == target_lap_index) {

@@ -21,7 +21,6 @@ private:
     // properties
     double sample_interval = 0.02;
     double samples_per_meter = 1.0;
-    String save_file_signature = "ACTL";
 
     ISimProvider* _get_provider_for_signature(const String& sig);
     ISimProvider* _create_provider(const String& sim_id);
@@ -89,13 +88,9 @@ public:
         }
     }
 
-    String get_save_file_signature() const { return save_file_signature; }
-    void set_save_file_signature(String p_signature) { 
-        if (p_signature.is_empty()) return;
-        if (!is_currently_logging()) {
-            save_file_signature = p_signature; 
-            if (active_provider) active_provider->set_save_file_signature(save_file_signature);
-        }
+    String get_save_file_signature() const { 
+        if (active_provider) return active_provider->get_save_file_signature();
+        return "";
     }
 
     // utils

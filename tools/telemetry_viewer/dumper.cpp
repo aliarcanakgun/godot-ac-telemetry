@@ -2,7 +2,7 @@
 #include <fstream>
 #include <string>
 #include <iomanip>
-#include "../../src/telemetry_data_structs.h"
+#include "../../src/ac_data_structs.h"
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
     std::string filename = argv[1];
     float track_length = std::stof(argv[2]);
     
-    LapDataChannels data;
+    AC_LapDataChannels data;
     std::ifstream in(filename, std::ios::binary);
     if (!in.is_open()) {
         std::cerr << "Error opening file.\n";
@@ -31,8 +31,8 @@ int main(int argc, char** argv) {
     }
 
     // read static
-    SPageStatic static_data;
-    in.read(reinterpret_cast<char*>(&static_data), sizeof(SPageStatic));
+    AC_SPageStatic static_data;
+    in.read(reinterpret_cast<char*>(&static_data), sizeof(AC_SPageStatic));
     
     // read sample interval - samples per meter
     double sample_interval, samples_per_meter;

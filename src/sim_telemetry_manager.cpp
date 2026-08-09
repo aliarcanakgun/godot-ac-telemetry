@@ -1,9 +1,12 @@
 #include "sim_telemetry_manager.h"
 #include "ac_provider.h"
+#include "acc_provider.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include "helper.h"
 #include <fstream>
 #include <cmath>
+#include <windows.h>
 
 using namespace godot;
 
@@ -78,18 +81,18 @@ void SimTelemetryManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_samples_per_meter"), &SimTelemetryManager::get_samples_per_meter);
     ClassDB::bind_method(D_METHOD("set_samples_per_meter", "spm"), &SimTelemetryManager::set_samples_per_meter);
     ClassDB::bind_method(D_METHOD("get_save_file_signature"), &SimTelemetryManager::get_save_file_signature);
-    ClassDB::bind_method(D_METHOD("set_save_file_signature", "sig"), &SimTelemetryManager::set_save_file_signature);
 
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval"), "set_sample_interval", "get_sample_interval");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "samples_per_meter"), "set_samples_per_meter", "get_samples_per_meter");
-    ADD_PROPERTY(PropertyInfo(Variant::STRING, "save_file_signature"), "set_save_file_signature", "get_save_file_signature");
 }
 
 ISimProvider* SimTelemetryManager::_create_provider(const String& sim_id) {
-    if (sim_id == "AC" || sim_id == "ACC") {
+    if (sim_id == "AC") {
         return new ACProvider();
+    } else if (sim_id == "ACC") {
+        return new ACCProvider();
     }
-    // future providers (acc, iracing, etc)
+    // future providers (iracing, etc)
     return nullptr;
 }
 
@@ -99,13 +102,13 @@ String SimTelemetryManager::_detect_file_signature(const String& file_path) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }
     std::ifstream infile(os_path.utf8().get_data(), std::ios::binary);
-    if (!infile.is_open()) return "ACTL"; // fallback
+    if (!infile.is_open()) return "";
 
     char sig[5] = {0};
     infile.read(sig, 4);
     
     for (int i = 0; i < 4; i++) {
-        if (sig[i] < 32 || sig[i] > 126) return "ACTL"; // fallback if garbage
+        if (sig[i] < 32 || sig[i] > 126) return "";
     }
     return String(sig);
 }
@@ -113,6 +116,9 @@ String SimTelemetryManager::_detect_file_signature(const String& file_path) {
 ISimProvider* SimTelemetryManager::_get_provider_for_signature(const String& sig) {
     if (sig == "ACTL") {
         return new ACProvider();
+    }
+    else if (sig == "ACCT") {
+        return new ACCProvider();
     }
     return nullptr;
 }
@@ -135,7 +141,6 @@ String SimTelemetryManager::connect_to_sim(const String& sim_id) {
 
     new_prov->set_sample_interval(sample_interval);
     new_prov->set_samples_per_meter(samples_per_meter);
-    new_prov->set_save_file_signature(save_file_signature);
 
     active_provider.reset(new_prov);
     current_sim_id = sim_id;
@@ -144,10 +149,11 @@ String SimTelemetryManager::connect_to_sim(const String& sim_id) {
 }
 
 String SimTelemetryManager::detect_active_sim() const {
-    // try ac
-    std::unique_ptr<ACProvider> temp_ac = std::make_unique<ACProvider>();
-    if (temp_ac->connect_provider().is_empty()) {
-        temp_ac->disconnect_provider();
+    if (ACCProvider::check_is_active()) {
+        return "ACC";
+    }
+
+    if (ACProvider::check_is_active()) {
         return "AC";
     }
     
@@ -238,7 +244,6 @@ String SimTelemetryManager::load_session_data(const String& file_path) {
     
     new_prov->set_sample_interval(sample_interval);
     new_prov->set_samples_per_meter(samples_per_meter);
-    new_prov->set_save_file_signature(save_file_signature);
     
     active_provider.reset(new_prov);
     return active_provider->load_session(file_path);

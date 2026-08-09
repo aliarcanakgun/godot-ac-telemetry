@@ -36,15 +36,15 @@ typedef int AC_FLAG_TYPE;
 // ensure 4-byte alignment to match assetto corsa memory layout
 #pragma pack(push, 4)
 
-struct SPagePhysics {
-    int packetId = 0;
-    float gas = 0;
-    float brake = 0;
-    float fuel = 0;
-    int gear = 0;
-    int rpms = 0;
-    float steerAngle = 0;
-    float speedKmh = 0;
+struct AC_SPagePhysics {
+    int packetId;
+    float gas;
+    float brake;
+    float fuel;
+    int gear;
+    int rpms;
+    float steerAngle;
+    float speedKmh;
     float velocity[3];
     float accG[3];
     float wheelSlip[4];
@@ -56,39 +56,39 @@ struct SPagePhysics {
     float tyreCoreTemperature[4];
     float camberRAD[4];
     float suspensionTravel[4];
-    float drs = 0;
-    float tc = 0;
-    float heading = 0;
-    float pitch = 0;
-    float roll = 0;
+    float drs;
+    float tc;
+    float heading;
+    float pitch;
+    float roll;
     float cgHeight;
     float carDamage[5];
-    int numberOfTyresOut = 0;
-    int pitLimiterOn = 0;
-    float abs = 0;
-    float kersCharge = 0;
-    float kersInput = 0;
-    int autoShifterOn = 0;
+    int numberOfTyresOut;
+    int pitLimiterOn;
+    float abs;
+    float kersCharge;
+    float kersInput;
+    int autoShifterOn;
     float rideHeight[2];
-    float turboBoost = 0;
-    float ballast = 0;
-    float airDensity = 0;
+    float turboBoost;
+    float ballast;
+    float airDensity;
 
-    float airTemp = 0;
-    float roadTemp = 0;
+    float airTemp;
+    float roadTemp;
     float localAngularVel[3];
-    float finalFF = 0;
-    float performanceMeter = 0;
-    int engineBrake = 0;
-    int ersRecoveryLevel = 0;
-    int ersPowerLevel = 0;
-    int ersHeatCharging = 0;
-    int ersIsCharging = 0;
-    float kersCurrentKJ = 0;
-    int drsAvailable = 0;
-    int drsEnabled = 0;
+    float finalFF;
+    float performanceMeter;
+    int engineBrake;
+    int ersRecoveryLevel;
+    int ersPowerLevel;
+    int ersHeatCharging;
+    int ersIsCharging;
+    float kersCurrentKJ;
+    int drsAvailable;
+    int drsEnabled;
     float brakeTemp[4];
-    float clutch = 0;
+    float clutch;
     float tyreTempI[4];
     float tyreTempM[4];
     float tyreTempO[4];
@@ -100,101 +100,101 @@ struct SPagePhysics {
     float localVelocity[3];
 };
 
-struct SPageGraphic {
-    int packetId = 0;
+struct AC_SPageGraphic {
+    int packetId;
     AC_STATUS status = AC_OFF;
     AC_SESSION_TYPE session = AC_PRACTICE;
     wchar_t currentTime[15];
     wchar_t lastTime[15];
     wchar_t bestTime[15];
     wchar_t split[15];
-    int completedLaps = 0;
-    int position = 0;
-    int iCurrentTime = 0;
-    int iLastTime = 0;
-    int iBestTime = 0;
-    float sessionTimeLeft = 0;
-    float distanceTraveled = 0;
-    int isInPit = 0;
-    int currentSectorIndex = 0;
-    int lastSectorTime = 0;
-    int numberOfLaps = 0;
+    int completedLaps;
+    int position;
+    int iCurrentTime;
+    int iLastTime;
+    int iBestTime;
+    float sessionTimeLeft;
+    float distanceTraveled;
+    int isInPit;
+    int currentSectorIndex;
+    int lastSectorTime;
+    int numberOfLaps;
     wchar_t tyreCompound[33];
 
-    float replayTimeMultiplier = 0;
-    float normalizedCarPosition = 0;
+    float replayTimeMultiplier;
+    float normalizedCarPosition;
     float carCoordinates[3];
-    float penaltyTime = 0;
+    float penaltyTime;
     AC_FLAG_TYPE flag = AC_NO_FLAG;
-    int idealLineOn = 0;
-    int isInPitLane = 0;
+    int idealLineOn;
+    int isInPitLane;
 
-    float surfaceGrip = 0;
+    float surfaceGrip;
 
-    int mandatoryPitDone = 0;
-    float windSpeed = 0;
-    float windDirection = 0;
+    int mandatoryPitDone;
+    float windSpeed;
+    float windDirection;
 };
 
-struct SPageStatic {
+struct AC_SPageStatic {
     wchar_t smVersion[15];
     wchar_t acVersion[15];
 
     // session static info
-    int numberOfSessions = 0;
-    int numCars = 0;
+    int numberOfSessions;
+    int numCars;
     wchar_t carModel[33];
     wchar_t track[33];
     wchar_t playerName[33];
     wchar_t playerSurname[33];
     wchar_t playerNick[33];
-    int sectorCount = 0;
+    int sectorCount;
 
     // car static info
-    float maxTorque = 0;
-    float maxPower = 0;
-    int maxRpm = 0;
-    float maxFuel = 0;
+    float maxTorque;
+    float maxPower;
+    int maxRpm;
+    float maxFuel;
     float suspensionMaxTravel[4];
     float tyreRadius[4];
-    float maxTurboBoost = 0;
+    float maxTurboBoost;
 
-    float deprecated_1 = 0;
-    float deprecated_2 = 0;
+    float deprecated_1;
+    float deprecated_2;
 
-    int penaltiesEnabled = 0;
+    int penaltiesEnabled;
 
-    float aidFuelRate = 0;
-    float aidTireRate = 0;
-    float aidMechanicalDamage = 0;
-    int aidAllowTyreBlankets = 0;
-    float aidStability = 0;
-    int aidAutoClutch = 0;
-    int aidAutoBlip = 0;
+    float aidFuelRate;
+    float aidTireRate;
+    float aidMechanicalDamage;
+    int aidAllowTyreBlankets;
+    float aidStability;
+    int aidAutoClutch;
+    int aidAutoBlip;
 
     
-    int hasDRS = 0;
-    int hasERS = 0;
-    int hasKERS = 0;
-    float kersMaxJ = 0;
-    int engineBrakeSettingsCount = 0;
-    int ersPowerControllerCount = 0;
+    int hasDRS;
+    int hasERS;
+    int hasKERS;
+    float kersMaxJ;
+    int engineBrakeSettingsCount;
+    int ersPowerControllerCount;
     
-    float trackSPlineLength = 0;
+    float trackSPlineLength;
     wchar_t trackConfiguration[33];
     
-    float ersMaxJ = 0;
-    int isTimedRace = 0;
-    int hasExtraLap = 0;
+    float ersMaxJ;
+    int isTimedRace;
+    int hasExtraLap;
     wchar_t carSkin[33];
-    int reversedGridPositions = 0;
-    int pitWindowStart = 0;
-    int pitWindowEnd = 0;
-    int isOnline = 0;
+    int reversedGridPositions;
+    int pitWindowStart;
+    int pitWindowEnd;
+    int isOnline;
 };
 
 // channel data for a single lap
-struct LapDataChannels {
+struct AC_LapDataChannels {
     // timestamps & positions
     std::vector<double> timestamp;
     

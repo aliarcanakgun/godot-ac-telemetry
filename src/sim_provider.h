@@ -15,7 +15,7 @@ public:
 
     virtual void set_sample_interval(double interval) = 0;
     virtual void set_samples_per_meter(double spm) = 0;
-    virtual void set_save_file_signature(const godot::String& sig) = 0;
+    virtual godot::String get_save_file_signature() const = 0;
 
     virtual godot::String connect_provider() = 0;
     virtual void disconnect_provider() = 0;
