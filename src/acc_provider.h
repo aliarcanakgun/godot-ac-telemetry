@@ -57,7 +57,7 @@ private:
 
     void logging_loop();
     String _open_session_file(const String& file_path, std::ifstream& infile, ACC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets);
-    Dictionary _calculate_session_metadata(const ACC_SPageStatic& stat, uint64_t count, const std::vector<ACC_LapDataChannels>& laps);
+    Dictionary _calculate_session_metadata(const ACC_SPageStatic& stat, uint64_t count, std::vector<ACC_LapDataChannels>& laps);
     Dictionary _static_to_dict(const ACC_SPageStatic &s);
     Dictionary _lap_to_dict(const ACC_LapDataChannels& c);
 
@@ -70,6 +70,7 @@ public:
     static bool check_is_active();
     
     double get_acc_track_length(const String& track_name) const;
+    std::vector<float> get_acc_sectors(const String& track_name) const;
 
     // ISimProvider impl
     virtual godot::String connect_provider() override;

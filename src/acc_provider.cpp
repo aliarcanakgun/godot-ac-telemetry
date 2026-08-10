@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <cstdio>
+#include <map>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -155,6 +156,23 @@ String ACCProvider::stop_capture(const String& output_file_path) {
     
     if (sessions_data.empty()) return "No valid telemetry data was recorded.";
 
+    if (dataStatic) {
+        std::vector<float> boundaries = get_acc_sectors(wchar_to_gdstring(dataStatic->track, 33).to_lower());
+        for (auto& lap : sessions_data) {
+            if (lap.speedKmh.empty()) continue;
+            int current_sector = 0;
+            for (size_t j = 0; j < lap.normalizedCarPosition.size(); j++) {
+                float pos = lap.normalizedCarPosition[j];
+                if (current_sector < boundaries.size() && pos >= boundaries[current_sector]) {
+                    current_sector++;
+                }
+                if (j < lap.currentSectorIndex.size()) {
+                    lap.currentSectorIndex[j] = current_sector;
+                }
+            }
+        }
+    }
+    
     String output = output_file_path;
     if (output.is_empty()) output = session_output_file_path;
 
@@ -951,8 +969,9 @@ String ACCProvider::_open_session_file(const String& file_path, std::ifstream& i
     return "";
 }
 
-Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat, uint64_t count, const std::vector<ACC_LapDataChannels>& laps) {
+Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat, uint64_t count, std::vector<ACC_LapDataChannels>& laps) {
     Dictionary meta;
+    double track_length = get_acc_track_length(wchar_to_gdstring(stat.track, 33).to_lower());
 
     meta["track_name"] = wchar_to_gdstring(stat.track, 33).to_lower();
     meta["track_config"] = wchar_to_gdstring(stat.trackConfiguration, 33);
@@ -965,6 +984,34 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
     Dictionary sector_positions_norm;
     Dictionary sector_positions_m;
 
+    std::vector<float> boundaries = get_acc_sectors(wchar_to_gdstring(stat.track, 33).to_lower());
+    for (size_t s = 0; s < boundaries.size(); s++) {
+        sector_positions_norm[s] = boundaries[s];
+        sector_positions_m[s] = boundaries[s] * track_length;
+    }
+    
+    std::map<int, Dictionary> all_sector_times;
+    
+    for (uint64_t i = 0; i < count; i++) {
+        const ACC_LapDataChannels& lap = laps[i];
+        if (lap.speedKmh.empty()) continue;
+        
+        int current_sector = 0;
+        int last_boundary_time = 0;
+        
+        for (size_t j = 0; j < lap.currentSectorIndex.size(); j++) {
+            if (lap.currentSectorIndex[j] > current_sector) {
+                int sector_time = lap.iCurrentTime[j] - last_boundary_time;
+                if (sector_time > 0) {
+                    if (!all_sector_times.count(i)) all_sector_times[i] = Dictionary();
+                    all_sector_times[i][current_sector] = sector_time;
+                }
+                last_boundary_time = lap.iCurrentTime[j];
+                current_sector = lap.currentSectorIndex[j];
+            }
+        }
+    }
+    
     for (uint64_t i = 0; i < count; i++) {
         const ACC_LapDataChannels& lap = laps[i];
 
@@ -973,29 +1020,18 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
         Dictionary lap_stats;
         int lap_time = 0;
         Dictionary sector_times;
+        if (all_sector_times.count(i)) {
+            sector_times = all_sector_times[i];
+        }
         float top_speed = 0.0f;
-        int current_sec_idx = lap.currentSectorIndex.empty() ? 0 : lap.currentSectorIndex[0];
 
         for (size_t j = 0; j < lap.speedKmh.size(); j++) {
-            if (!lap.currentSectorIndex.empty() && lap.currentSectorIndex[j] != current_sec_idx) {
-                if (lap.lastSectorTime[j] > 0 && lap.lastSectorTime[j] <= lap.iCurrentTime[j] + 2000) {
-                    sector_times[current_sec_idx] = lap.lastSectorTime[j];
-                }
-                
-                if (lap.currentSectorIndex[j] > current_sec_idx) {
-                    if (!sector_positions_norm.has(current_sec_idx) && j < lap.normalizedCarPosition.size()) {
-                        float pos = lap.normalizedCarPosition[j];
-                        sector_positions_norm[current_sec_idx] = pos;
-                        sector_positions_m[current_sec_idx] = pos * stat.trackSPlineLength;
-                    }
-                }
-                
-                current_sec_idx = lap.currentSectorIndex[j];
-            }
             if (lap.speedKmh[j] > top_speed) {
                 top_speed = lap.speedKmh[j];
             }
         }
+        
+
 
         bool is_completed = false;
         if (lap.normalizedCarPosition.size() > 1) {
@@ -1016,6 +1052,7 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
 
         int next_lap_best_time = 0;
         // try getting exact time from next lap if exists
+        int real_lap_time = 0;
         if (i + 1 < count) {
             const ACC_LapDataChannels& next_lap = laps[i + 1];
             
@@ -1023,27 +1060,55 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
                 next_lap_best_time = next_lap.iBestTime[0];
             }
 
+            // use the first valid iLastTime from the start of the next lap.
+            // acc updates iLastTime ~25m before completedLaps increments, so
+            // near the end of a lap's data, iLastTime already contains the
+            // current lap's own time. using max() picks up the wrong value.
+            // the first samples of the next lap hold the true previous lap time.
             if (!next_lap.iLastTime.empty()) {
-                lap_time = 0;
-                for (int t : next_lap.iLastTime) {
-                    if (t > lap_time) lap_time = t;
-                }
-            }
-            if (lap_time == 0 && !lap.iCurrentTime.empty()) {
-                lap_time = lap.iCurrentTime.back();
-            }
-
-            if (is_completed && !next_lap.currentSectorIndex.empty() && !next_lap.lastSectorTime.empty()) {
-                for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
-                    if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
-                        sector_times[current_sec_idx] = next_lap.lastSectorTime[k];
+                size_t check_limit = std::min(next_lap.iLastTime.size(), (size_t)200);
+                for (size_t k = 0; k < check_limit; k++) {
+                    int t = next_lap.iLastTime[k];
+                    if (t > 0 && t < 2147483647) {
+                        real_lap_time = t;
                         break;
                     }
                 }
             }
+        }
+        
+        if (real_lap_time > 0) {
+            lap_time = real_lap_time;
+        } else if (!lap.iCurrentTime.empty()) {
+            // fallback to max iCurrentTime value in this lap's data.
+            // we can't use .back() because acc resets iCurrentTime ~25m before
+            // our lap boundary (position wrap), so the last samples are near-zero.
+            // max() safely captures the elapsed time before acc's internal reset.
+            int max_time = 0;
+            for (int t : lap.iCurrentTime) {
+                if (t > max_time && t < 2147483647) max_time = t;
+            }
+            lap_time = max_time;
         } else {
-            lap_time = lap.iCurrentTime.empty() ? 0 : lap.iCurrentTime.back();
+            lap_time = 0; // Invalid lap
             is_completed = false;
+        }
+
+        // calculate final sector time geometrically
+        int last_sec_idx = (stat.sectorCount > 0) ? stat.sectorCount - 1 : 2;
+        if (lap_time > 0 && !sector_times.has(last_sec_idx)) {
+            int accumulated_time = 0;
+            bool all_prev_exist = true;
+            for (int s = 0; s < last_sec_idx; s++) {
+                if (sector_times.has(s)) {
+                    accumulated_time += (int)sector_times[s];
+                } else {
+                    all_prev_exist = false;
+                }
+            }
+            if (all_prev_exist && accumulated_time > 0 && lap_time > accumulated_time) {
+                sector_times[last_sec_idx] = lap_time - accumulated_time;
+            }
         }
 
         bool is_valid = is_completed;
@@ -1137,7 +1202,7 @@ Dictionary ACCProvider::_static_to_dict(const ACC_SPageStatic &s) {
     dict["ersMaxJ"] = s.ersMaxJ;
     dict["isTimedRace"] = s.isTimedRace;
     dict["hasExtraLap"] = s.hasExtraLap;
-    dict["carSkin"] = wchar_to_gdstring(s.carSkin, 33);
+    dict["carSkin"] = ""; // NOTE: 'carSkin' is not used by acc
     dict["reversedGridPositions"] = s.reversedGridPositions;
     dict["pitWindowStart"] = s.pitWindowStart;
     dict["pitWindowEnd"] = s.pitWindowEnd;
@@ -1149,7 +1214,7 @@ Dictionary ACCProvider::_static_to_dict(const ACC_SPageStatic &s) {
     // TODO: it can be expanded later
     dict["car_model"] = wchar_to_gdstring(s.carModel, 33);
     dict["track_name"] = wchar_to_gdstring(s.track, 33).to_lower();
-    dict["track_config"] = wchar_to_gdstring(s.trackConfiguration, 33);
+    dict["track_config"] = ""; // NOTE: 'trackConfiguration' is not used by acc
     dict["track_length"] = get_acc_track_length(dict["track_name"]);
     dict["max_rpm"] = s.maxRpm;
     dict["sector_count"] = s.sectorCount;
@@ -1191,6 +1256,39 @@ double ACCProvider::get_acc_track_length(const String& track_name) const {
     }
     
     return 0.0;
+}
+
+std::vector<float> ACCProvider::get_acc_sectors(const String& track_name) const {
+    // TODO: this list will be updated to real values after some tests
+
+    if (track_name == "barcelona") return {0.33f, 0.66f};
+    if (track_name == "brands_hatch") return {0.33f, 0.66f};
+    if (track_name == "hungaroring") return {0.33f, 0.66f};
+    if (track_name == "misano") return {0.33f, 0.66f};
+    if (track_name == "monza") return {0.33f, 0.66f};
+    if (track_name == "nurburgring") return {0.33f, 0.66f};
+    if (track_name == "paul_ricard") return {0.33f, 0.66f};
+    if (track_name == "silverstone") return {0.33f, 0.66f};
+    if (track_name == "spa") return {0.33f, 0.66f};
+    if (track_name == "zandvoort") return {0.33f, 0.66f};
+    if (track_name == "zolder") return {0.33f, 0.66f};
+
+    if (track_name == "imola") return {0.33f, 0.66f};
+    if (track_name == "donington") return {0.33f, 0.66f};
+    if (track_name == "oulton_park") return {0.33f, 0.66f};
+    if (track_name == "snetterton") return {0.33f, 0.66f};
+    if (track_name == "kyalami") return {0.33f, 0.66f};
+    if (track_name == "laguna_seca") return {0.33f, 0.66f};
+    if (track_name == "mount_panorama") return {0.33f, 0.66f};
+    if (track_name == "suzuka") return {0.33f, 0.66f};
+    if (track_name == "cota") return {0.33f, 0.66f};
+    if (track_name == "indianapolis") return {0.33f, 0.66f};
+    if (track_name == "watkins_glen") return {0.33f, 0.66f};
+    if (track_name == "valencia") return {0.33f, 0.66f};
+    if (track_name == "red_bull_ring") return {0.33f, 0.66f};
+    if (track_name == "nuerburgring_24h") return {0.33f, 0.66f};
+
+    return {1.0f/3.0f, 2.0f/3.0f}; // fallback for 3 sectors
 }
 
 void ACCProvider::logging_loop() {
@@ -1241,7 +1339,7 @@ void ACCProvider::logging_loop() {
             }
 
             // physics stale check         
-            if (dataGraphic->status != AC_LIVE) {
+            if (dataGraphic->status != ACC_LIVE && dataGraphic->status != ACC_REPLAY) {
                 stale_counter = 0;
                 std::this_thread::sleep_until(next_tick);
                 continue;
@@ -1257,28 +1355,37 @@ void ACCProvider::logging_loop() {
                 std::lock_guard<std::mutex> lock(data_mutex);
 
                 bool lap_changed = false;
-                if (dataGraphic->iCurrentTime < last_i_current_time) {
+                
+                // prevent garage-to-pit teleportation jumps from ruining the out-lap chart
+                // wait until the car actually moves before recording the first lap's samples
+                if (sessions_data.empty() || sessions_data.back().timestamp.empty()) {
+                    if (dataPhysics->speedKmh < 1.0f) {
+                        continue;
+                    }
+                }
+                
+                
+                static float last_graphic_norm_pos = 0.0f;
+                float current_graphic_norm_pos = dataGraphic->normalizedCarPosition;
+
+                // primary trigger: spline position wrap-around (1.0 -> 0.0)
+                // we previously used completedLaps, but acc drops the out-lap count,
+                // causing the out-lap and lap 1 to merge. the spline wrap-around
+                // perfectly coincides with iCurrentTime reset and position wrap,
+                // making it the most mathematically stable boundary for ui rendering.
+                if (current_graphic_norm_pos < 0.05f && last_graphic_norm_pos > 0.95f) {
                     lap_changed = true;
                 }
-                last_i_current_time = dataGraphic->iCurrentTime;
+                last_graphic_norm_pos = current_graphic_norm_pos;
                 
+                // still track completedLaps for metadata reference
+                // even though it's not the trigger
                 if (dataGraphic->completedLaps > last_lap_count) {
-                    lap_changed = true;
                     last_lap_count = dataGraphic->completedLaps;
                 }
 
-                // detect spatial lap crossing to avoid delayed lap timers
-                if (!sessions_data.empty() && !sessions_data.back().normalizedCarPosition.empty()) {
-                    float last_pos = sessions_data.back().normalizedCarPosition.back();
-                    if (last_pos > 0.8f && dataGraphic->normalizedCarPosition < 0.2f) {
-                        lap_changed = true;
-                    }
-                    
-                    float jump = std::abs(dataGraphic->normalizedCarPosition - last_pos);
-                    if (jump > 0.1f && !(last_pos > 0.8f && dataGraphic->normalizedCarPosition < 0.2f)) {
-                        lap_changed = true;
-                    }
-                }
+                // track iCurrentTime for metadata use
+                last_i_current_time = dataGraphic->iCurrentTime;
 
                 if (lap_changed || sessions_data.empty()) {
                     bool should_push = true;
@@ -1298,7 +1405,7 @@ void ACCProvider::logging_loop() {
                 }
 
                 // track continuous spline distance
-                // graphic position updates at 60Hz, physics at 333Hz.
+                // graphic position updates at 60Hz, physics at 400.
                 // using graphic pos directly causes staircase artifacts.
                 // we integrate physics speed for smooth high-frequency distance
                 // and soft-correct it to graphic pos.
@@ -1373,11 +1480,11 @@ void ACCProvider::logging_loop() {
                             direction = (current_meter > last_recorded_meter) ? 1.0 : -1.0;
                             last_recorded_meter += distance_threshold * direction;
                             
-                            if (dataStatic->trackSPlineLength > 0.0) {
-                                if (last_recorded_meter >= dataStatic->trackSPlineLength) {
-                                    last_recorded_meter -= dataStatic->trackSPlineLength;
+                            if (current_track_length > 0.0) {
+                                if (last_recorded_meter >= current_track_length) {
+                                    last_recorded_meter -= current_track_length;
                                 } else if (last_recorded_meter < 0.0) {
-                                    last_recorded_meter += dataStatic->trackSPlineLength;
+                                    last_recorded_meter += current_track_length;
                                 }
                             }
                         }
@@ -1388,20 +1495,20 @@ void ACCProvider::logging_loop() {
                     // time interpolation pass
                     // since we trigger records based on high-frequency distance (complementary filter above),
                     // we must also interpolate the 60hz graphic time to match the exact moment of this sample.
-                    // we use the 333hz physics packet difference to smoothly advance the clock.
+                    // we use the 400hz physics packet difference to smoothly advance the clock.
                     double smoothed_timestamp = dataGraphic->iCurrentTime / 1000.0;
                     int32_t smoothed_iCurrentTime = dataGraphic->iCurrentTime;
                     double smoothed_normalizedCarPosition = dataGraphic->normalizedCarPosition;
                     float smoothed_distanceTraveled = dataGraphic->distanceTraveled;
 
-                    if (dataStatic->trackSPlineLength > 0.0) {
-                        smoothed_normalizedCarPosition = last_recorded_meter / dataStatic->trackSPlineLength;
+                    if (current_track_length > 0.0) {
+                        smoothed_normalizedCarPosition = last_recorded_meter / current_track_length;
                     }
 
                     if (!lap.timestamp.empty() && old_last_recorded_meter >= 0.0) {
                         int packet_diff = dataPhysics->packetId - lap.packetId_physics.back();
                         if (packet_diff > 0 && packet_diff < 1000) {
-                            double dt = packet_diff * (1.0 / 333.333333333); // acc physics is 333hz
+                            double dt = packet_diff * (1.0 / 400.0); // acc physics is 400hz
                             smoothed_timestamp = lap.timestamp.back() + dt;
                             smoothed_iCurrentTime = lap.iCurrentTime.back() + static_cast<int32_t>(dt * 1000.0);
                         }
