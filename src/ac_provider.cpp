@@ -748,6 +748,7 @@ String ACProvider::_open_session_file(const String& file_path, std::ifstream& in
 Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, uint64_t count, const std::vector<AC_LapDataChannels>& laps) {
     Dictionary meta;
 
+    meta["sim_id"] = "AC";
     meta["track_name"] = wchar_to_gdstring(stat.track, 33).to_lower();
     meta["track_config"] = wchar_to_gdstring(stat.trackConfiguration, 33);
     meta["car_name"] = wchar_to_gdstring(stat.carModel, 33);

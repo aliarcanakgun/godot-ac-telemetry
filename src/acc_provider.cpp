@@ -973,8 +973,9 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
     Dictionary meta;
     double track_length = get_acc_track_length(wchar_to_gdstring(stat.track, 33).to_lower());
 
+    meta["sim_id"] = "ACC";
     meta["track_name"] = wchar_to_gdstring(stat.track, 33).to_lower();
-    meta["track_config"] = wchar_to_gdstring(stat.trackConfiguration, 33);
+    meta["track_config"] = ""; // NOTE: 'trackConfiguration' is not used by acc
     meta["car_name"] = wchar_to_gdstring(stat.carModel, 33);
     meta["total_laps"] = (int)count;
     meta["sector_count"] = stat.sectorCount;
@@ -1060,19 +1061,26 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
                 next_lap_best_time = next_lap.iBestTime[0];
             }
 
-            // use the first valid iLastTime from the start of the next lap.
-            // acc updates iLastTime ~25m before completedLaps increments, so
-            // near the end of a lap's data, iLastTime already contains the
-            // current lap's own time. using max() picks up the wrong value.
-            // the first samples of the next lap hold the true previous lap time.
+            // timing line and position wrap are often slightly offset.
+            // the very first samples of next_lap might still hold the previous lap's time,
+            // and the very last samples might hold next_lap's time.
+            // however, the vast majority of next_lap's samples will hold this lap's true time.
+            // we extract it by finding the most frequent valid iLastTime in next_lap.
             if (!next_lap.iLastTime.empty()) {
-                size_t check_limit = std::min(next_lap.iLastTime.size(), (size_t)200);
-                for (size_t k = 0; k < check_limit; k++) {
-                    int t = next_lap.iLastTime[k];
-                    if (t > 0 && t < 2147483647) {
-                        real_lap_time = t;
-                        break;
+                std::map<int, int> counts;
+                int max_count = 0;
+                int most_frequent_time = 0;
+                for (int t : next_lap.iLastTime) {
+                    if (t > 0 && t < INT_MAX) {
+                        counts[t]++;
+                        if (counts[t] > max_count) {
+                            max_count = counts[t];
+                            most_frequent_time = t;
+                        }
                     }
+                }
+                if (most_frequent_time > 0) {
+                    real_lap_time = most_frequent_time;
                 }
             }
         }
@@ -1086,7 +1094,7 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
             // max() safely captures the elapsed time before acc's internal reset.
             int max_time = 0;
             for (int t : lap.iCurrentTime) {
-                if (t > max_time && t < 2147483647) max_time = t;
+                if (t > max_time && t < INT_MAX) max_time = t;
             }
             lap_time = max_time;
         } else {
@@ -1112,17 +1120,62 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
         }
 
         bool is_valid = is_completed;
-        if (is_valid) {
-            for (size_t k = 0; k < lap.numberOfTyresOut.size(); k++) {
-                if (lap.numberOfTyresOut[k] >= 4 || lap.penaltyTime[k] > 0.0f || lap.flag[k] == AC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
-                    is_valid = false;
-                    break;
+        if (is_valid && !lap.isValidLap.empty() && !lap.iCurrentTime.empty()) {
+            // acc's isValidLap is transient and can reset prematurely near the end of a lap.
+            // instead of checking a single snapshot, we scan the entire lap's validity.
+            // we ignore the first and last 5% of the normalized position to prevent
+            // timing line offsets from bleeding a 0 value from adjacent laps.
+            bool found_invalid = false;
+            if (lap.normalizedCarPosition.size() == lap.isValidLap.size()) {
+                for (size_t k = 0; k < lap.isValidLap.size(); k++) {
+                    float pos = lap.normalizedCarPosition[k];
+                    if (pos > 0.05f && pos < 0.95f) {
+                        if (lap.isValidLap[k] == 0) {
+                            found_invalid = true;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // fallback if sizes don't match: check the middle portion by index
+                size_t start_idx = lap.isValidLap.size() / 20; // 5%
+                size_t end_idx = lap.isValidLap.size() - start_idx; // 95%
+                for (size_t k = start_idx; k < end_idx; k++) {
+                    if (lap.isValidLap[k] == 0) {
+                        found_invalid = true;
+                        break;
+                    }
                 }
             }
-            // check if it's best. if it is, next lap's best time will be this lap's time
-            if (is_valid && !lap.iBestTime.empty() && lap.iBestTime[0] > 0 && lap_time > 0 && lap_time < lap.iBestTime[0]) {
-                if (next_lap_best_time > 0 && next_lap_best_time != lap_time) {
-                    is_valid = false;
+            
+            if (found_invalid) {
+                is_valid = false;
+            }
+            
+            // still check for pitlane or penalty flags as hard invalidations.
+            // we apply the same 5% to 95% safety margin here to prevent flags or 
+            // pit entry/exit states from bleeding over the timing line.
+            if (is_valid) {
+                if (lap.normalizedCarPosition.size() == lap.penaltyTime.size()) {
+                    for (size_t k = 0; k < lap.penaltyTime.size(); k++) {
+                        float pos = lap.normalizedCarPosition[k];
+                        if (pos > 0.05f && pos < 0.95f) {
+                            if (lap.penaltyTime[k] > 0.0f || lap.flag[k] == ACC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
+                                is_valid = false;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    // fallback if sizes don't match for some reason
+                    size_t start_idx = lap.penaltyTime.size() / 20;
+                    size_t end_idx = lap.penaltyTime.size() - start_idx;
+                    for (size_t k = start_idx; k < end_idx; k++) {
+                        if (lap.penaltyTime[k] > 0.0f || lap.flag[k] == ACC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
+                            is_valid = false;
+                            break;
+                        }
+                    }
                 }
             }
         }
