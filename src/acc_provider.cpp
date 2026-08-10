@@ -1259,35 +1259,37 @@ double ACCProvider::get_acc_track_length(const String& track_name) const {
 }
 
 std::vector<float> ACCProvider::get_acc_sectors(const String& track_name) const {
-    // TODO: this list will be updated to real values after some tests
+    // real world sector distances in meters
+    // (approximate to fia timing loops, acc spline might vary slightly)
+    double track_len = get_acc_track_length(track_name);
 
-    if (track_name == "barcelona") return {0.33f, 0.66f};
-    if (track_name == "brands_hatch") return {0.33f, 0.66f};
-    if (track_name == "hungaroring") return {0.33f, 0.66f};
-    if (track_name == "misano") return {0.33f, 0.66f};
-    if (track_name == "monza") return {0.33f, 0.66f};
-    if (track_name == "nurburgring") return {0.33f, 0.66f};
-    if (track_name == "paul_ricard") return {0.33f, 0.66f};
-    if (track_name == "silverstone") return {0.33f, 0.66f};
-    if (track_name == "spa") return {0.33f, 0.66f};
-    if (track_name == "zandvoort") return {0.33f, 0.66f};
-    if (track_name == "zolder") return {0.33f, 0.66f};
+    if (track_name == "barcelona") return {(float)(1528 / track_len), (float)(3105 / track_len)};
+    if (track_name == "brands_hatch") return {(float)(1260 / track_len), (float)(2595 / track_len)};
+    if (track_name == "hungaroring") return {(float)(1405 / track_len), (float)(2871 / track_len)};
+    if (track_name == "misano") return {(float)(1425 / track_len), (float)(2850 / track_len)};
+    if (track_name == "monza") return {(float)(1724 / track_len), (float)(3877 / track_len)};
+    if (track_name == "nurburgring") return {(float)(1625 / track_len), (float)(3355 / track_len)};
+    if (track_name == "paul_ricard") return {(float)(1875 / track_len), (float)(3825 / track_len)};
+    if (track_name == "silverstone") return {(float)(1968 / track_len), (float)(4165 / track_len)};
+    if (track_name == "spa") return {(float)(2225 / track_len), (float)(5283 / track_len)};
+    if (track_name == "zandvoort") return {(float)(1440 / track_len), (float)(2880 / track_len)};
+    if (track_name == "zolder") return {(float)(1333 / track_len), (float)(2666 / track_len)};
 
-    if (track_name == "imola") return {0.33f, 0.66f};
-    if (track_name == "donington") return {0.33f, 0.66f};
-    if (track_name == "oulton_park") return {0.33f, 0.66f};
-    if (track_name == "snetterton") return {0.33f, 0.66f};
-    if (track_name == "kyalami") return {0.33f, 0.66f};
-    if (track_name == "laguna_seca") return {0.33f, 0.66f};
-    if (track_name == "mount_panorama") return {0.33f, 0.66f};
-    if (track_name == "suzuka") return {0.33f, 0.66f};
-    if (track_name == "cota") return {0.33f, 0.66f};
-    if (track_name == "indianapolis") return {0.33f, 0.66f};
-    if (track_name == "watkins_glen") return {0.33f, 0.66f};
-    if (track_name == "valencia") return {0.33f, 0.66f};
-    if (track_name == "red_bull_ring") return {0.33f, 0.66f};
-    if (track_name == "nuerburgring_24h") return {0.33f, 0.66f};
-
+    if (track_name == "imola") return {(float)(1636 / track_len), (float)(3272 / track_len)};
+    if (track_name == "donington") return {(float)(1340 / track_len), (float)(2680 / track_len)};
+    if (track_name == "oulton_park") return {(float)(1435 / track_len), (float)(2870 / track_len)};
+    if (track_name == "snetterton") return {(float)(1593 / track_len), (float)(3186 / track_len)};
+    if (track_name == "kyalami") return {(float)(1507 / track_len), (float)(3014 / track_len)};
+    if (track_name == "laguna_seca") return {(float)(1200 / track_len), (float)(2400 / track_len)};
+    if (track_name == "mount_panorama") return {(float)(2071 / track_len), (float)(4142 / track_len)};
+    if (track_name == "suzuka") return {(float)(1935 / track_len), (float)(3870 / track_len)};
+    if (track_name == "cota") return {(float)(1837 / track_len), (float)(3674 / track_len)};
+    if (track_name == "indianapolis") return {(float)(1397 / track_len), (float)(2794 / track_len)};
+    if (track_name == "watkins_glen") return {(float)(1810 / track_len), (float)(3620 / track_len)};
+    if (track_name == "valencia") return {(float)(1335 / track_len), (float)(2670 / track_len)};
+    if (track_name == "red_bull_ring") return {(float)(1439 / track_len), (float)(2878 / track_len)};
+    if (track_name == "nuerburgring_24h") return {(float)(8459 / track_len), (float)(16918 / track_len)};
+    
     return {1.0f/3.0f, 2.0f/3.0f}; // fallback for 3 sectors
 }
 
