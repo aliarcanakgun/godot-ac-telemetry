@@ -135,6 +135,8 @@ String ACCProvider::start_capture(const String& output_file_path) {
 }
 
 String ACCProvider::stop_capture(const String& output_file_path) {
+    // TODO: zstd compression can be added
+
     if (!is_connected_flag) return "ACC is not connected.";
     if (!is_logging) return "Telemetry is not working.";
 
@@ -381,7 +383,11 @@ Dictionary ACCProvider::_lap_to_dict(const ACC_LapDataChannels& c) {
     d["drsAvailable"] = to_int_array(c.drsAvailable);
     d["drsEnabled"] = to_int_array(c.drsEnabled);
     d["clutch"] = to_float_array(c.clutch);
-    d["brakeBias"] = to_float_array(c.brakeBias);
+    d["brakeBias_raw"] = to_float_array(c.brakeBias);
+
+    String car_model = wchar_to_gdstring(loaded_session_static_data.carModel, 33);
+    d["brakeBias"] = to_float_array_offset(c.brakeBias, get_acc_bbias_offset(car_model));
+    
     d["localVelocity_x"] = to_float_array(c.localVelocity_x);
     d["localVelocity_y"] = to_float_array(c.localVelocity_y);
     d["localVelocity_z"] = to_float_array(c.localVelocity_z);
@@ -426,7 +432,13 @@ Dictionary ACCProvider::_lap_to_dict(const ACC_LapDataChannels& c) {
     d["tyreTemp_FL"] = to_float_array(c.tyreTemp_FL); d["tyreTemp_FR"] = to_float_array(c.tyreTemp_FR); d["tyreTemp_RL"] = to_float_array(c.tyreTemp_RL); d["tyreTemp_RR"] = to_float_array(c.tyreTemp_RR);
     d["waterTemp"] = to_float_array(c.waterTemp);
     
-    d["brakePressure_FL"] = to_float_array(c.brakePressure_FL); d["brakePressure_FR"] = to_float_array(c.brakePressure_FR); d["brakePressure_RL"] = to_float_array(c.brakePressure_RL); d["brakePressure_RR"] = to_float_array(c.brakePressure_RR);
+    float front_bpressure_mult = get_acc_bpressure_multiplier(car_model, true) * 10.0f; // multiply by 10 to
+    float rear_bpressure_mult = get_acc_bpressure_multiplier(car_model, false) * 10.0f; // convert it to bar
+    d["brakePressure_FL"] = to_float_array_multiplier(c.brakePressure_FL, front_bpressure_mult);
+    d["brakePressure_FR"] = to_float_array_multiplier(c.brakePressure_FR, front_bpressure_mult);
+    d["brakePressure_RL"] = to_float_array_multiplier(c.brakePressure_RL, rear_bpressure_mult);
+    d["brakePressure_RR"] = to_float_array_multiplier(c.brakePressure_RR, rear_bpressure_mult);
+
     d["padLife_FL"] = to_float_array(c.padLife_FL); d["padLife_FR"] = to_float_array(c.padLife_FR); d["padLife_RL"] = to_float_array(c.padLife_RL); d["padLife_RR"] = to_float_array(c.padLife_RR);
     d["discLife_FL"] = to_float_array(c.discLife_FL); d["discLife_FR"] = to_float_array(c.discLife_FR); d["discLife_RL"] = to_float_array(c.discLife_RL); d["discLife_RR"] = to_float_array(c.discLife_RR);
     
@@ -597,7 +609,7 @@ String ACCProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "velocity_x") return "velocity_x";
     if (standard_name == "velocity_y") return "velocity_y";
     if (standard_name == "velocity_z") return "velocity_z";
-    if (standard_name == "local_velocity_x") return "localVelocity_x";
+    if (standard_name == "lateral_velocity") return "localVelocity_x";
     if (standard_name == "local_velocity_y") return "localVelocity_y";
     if (standard_name == "local_velocity_z") return "localVelocity_z";
     if (standard_name == "local_angular_vel_x") return "localAngularVel_x";
@@ -736,6 +748,7 @@ String ACCProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "drs") return "drs";
     if (standard_name == "tc") return "tc";
     if (standard_name == "abs") return "abs";
+    if (standard_name == "brake_bias_raw") return "brakeBias_raw";
     if (standard_name == "brake_bias") return "brakeBias";
     if (standard_name == "kers_charge") return "kersCharge";
     if (standard_name == "kers_input") return "kersInput";
@@ -1273,6 +1286,124 @@ Dictionary ACCProvider::_static_to_dict(const ACC_SPageStatic &s) {
     dict["sector_count"] = s.sectorCount;
     
     return dict;
+}
+
+float ACCProvider::get_acc_bbias_offset(const String& car_model) const {
+    // gt3 - 2018
+    if (car_model == "amr_v12_vantage_gt3") return -7.0f;
+    else if (car_model == "audi_r8_lms") return -14.0f;
+    else if (car_model == "bentley_continental_gt3_2016") return -7.0f;
+    else if (car_model == "bentley_continental_gt3_2018") return -7.0f;
+    else if (car_model == "bmw_m6_gt3") return -15.0f;
+    else if (car_model == "jaguar_g3") return -7.0f;
+    else if (car_model == "ferrari_488_gt3") return -17.0f;
+    else if (car_model == "honda_nsx_gt3") return -14.0f;
+    else if (car_model == "lamborghini_gallardo_rex") return -14.0f;
+    else if (car_model == "lamborghini_huracan_gt3") return -14.0f;
+    else if (car_model == "lamborghini_huracan_st") return -14.0f;
+    else if (car_model == "lexus_rc_f_gt3") return -14.0f;
+    else if (car_model == "mclaren_650s_gt3") return -17.0f;
+    else if (car_model == "mercedes_amg_gt3") return -14.0f;
+    else if (car_model == "nissan_gt_r_gt3_2017") return -15.0f;
+    else if (car_model == "nissan_gt_r_gt3_2018") return -15.0f;
+    else if (car_model == "porsche_991_gt3_r") return -21.0f;
+    else if (car_model == "porsche_991ii_gt3_cup") return -5.0f;
+    
+    // gt3 - 2019
+    else if (car_model == "amr_v8_vantage_gt3") return -7.0f;
+    else if (car_model == "audi_r8_lms_evo") return -14.0f;
+    else if (car_model == "honda_nsx_gt3_evo") return -14.0f;
+    else if (car_model == "lamborghini_huracan_gt3_evo") return -14.0f;
+    else if (car_model == "mclaren_720s_gt3") return -17.0f;
+    else if (car_model == "porsche_991ii_gt3_r") return -21.0f;
+    
+    // gt4
+    else if (car_model == "alpine_a110_gt4") return -15.0f;
+    else if (car_model == "amr_v8_vantage_gt4") return -20.0f;
+    else if (car_model == "audi_r8_gt4") return -15.0f;
+    else if (car_model == "bmw_m4_gt4") return -22.0f;
+    else if (car_model == "chevrolet_camaro_gt4r") return -18.0f;
+    else if (car_model == "ginetta_g55_gt4") return -18.0f;
+    else if (car_model == "ktm_xbow_gt4") return -20.0f;
+    else if (car_model == "maserati_mc_gt4") return -15.0f;
+    else if (car_model == "mclaren_570s_gt4") return -9.0f;
+    else if (car_model == "mercedes_amg_gt4") return -20.0f;
+    else if (car_model == "porsche_718_cayman_gt4_mr") return -20.0f;
+    
+    // gt3 - 2020
+    else if (car_model == "ferrari_488_gt3_evo") return -17.0f;
+    else if (car_model == "mercedes_amg_gt3_evo") return -14.0f;
+    
+    // gt3- 2021
+    else if (car_model == "bmw_m4_gt3") return -14.0f;
+    
+    // challengers pack - 2022
+    else if (car_model == "audi_r8_lms_evo_ii") return -14.0f;
+    else if (car_model == "bmw_m2_cs_racing") return -17.0f;
+    else if (car_model == "ferrari_488_challenge_evo") return -13.0f;
+    else if (car_model == "lamborghini_huracan_st_evo2") return -14.0f;
+    else if (car_model == "porsche_992_gt3_cup") return -5.0f;
+    
+    return 0.0f;
+}
+
+float ACCProvider::get_acc_bpressure_multiplier(const String& car_model, const bool is_front) const {
+    // gt3 - 2018
+    if (car_model == "amr_v12_vantage_gt3") return 7.9585f;
+    else if (car_model == "audi_r8_lms") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "bentley_continental_gt3_2016") return 7.9585f;
+    else if (car_model == "bentley_continental_gt3_2018") return 7.9585f;
+    else if (car_model == "bmw_m6_gt3") return 7.9585f;
+    else if (car_model == "jaguar_g3") return 7.9585f;
+    else if (car_model == "ferrari_488_gt3") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "honda_nsx_gt3") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "lamborghini_gallardo_rex") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "lamborghini_huracan_gt3") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "lamborghini_huracan_st") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "lexus_rc_f_gt3") return 7.9585f;
+    else if (car_model == "mclaren_650s_gt3") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "mercedes_amg_gt3") return 7.9585f;
+    else if (car_model == "nissan_gt_r_gt3_2017") return 7.9585f;
+    else if (car_model == "nissan_gt_r_gt3_2018") return 7.9585f;
+    else if (car_model == "porsche_991_gt3_r") return is_front ? 7.1497f : 6.7715f;
+    else if (car_model == "porsche_991ii_gt3_cup") return is_front ? 7.1497f : 6.7715f;
+    
+    // gt3 - 2019
+    else if (car_model == "amr_v8_vantage_gt3") return 7.9585f;
+    else if (car_model == "audi_r8_lms_evo") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "honda_nsx_gt3_evo") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "lamborghini_huracan_gt3_evo") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "mclaren_720s_gt3") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "porsche_991ii_gt3_r") return is_front ? 7.1497f : 6.7715f;
+    
+    // gt4
+    else if (car_model == "alpine_a110_gt4") return 10.0f;
+    else if (car_model == "amr_v8_vantage_gt4") return 10.0f;
+    else if (car_model == "audi_r8_gt4") return 10.0f;
+    else if (car_model == "bmw_m4_gt4") return is_front ? 7.2886 : 10.0f;
+    else if (car_model == "chevrolet_camaro_gt4r") return 10.0f;
+    else if (car_model == "ginetta_g55_gt4") return 10.0f;
+    else if (car_model == "ktm_xbow_gt4") return 10.0f;
+    else if (car_model == "maserati_mc_gt4") return is_front ? 7.7768f : 7.6142f;
+    else if (car_model == "mclaren_570s_gt4") return 10.0f;
+    else if (car_model == "mercedes_amg_gt4") return 10.0f;
+    else if (car_model == "porsche_718_cayman_gt4_mr") return 10.0f;
+    
+    // gt3 - 2020
+    else if (car_model == "ferrari_488_gt3_evo") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "mercedes_amg_gt3_evo") return 7.9585f;
+    
+    // gt3- 2021
+    else if (car_model == "bmw_m4_gt3") return 7.9585f;
+    
+    // challengers pack - 2022
+    else if (car_model == "audi_r8_lms_evo_ii") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "bmw_m2_cs_racing") return is_front ? 7.2886f : 10.0f;
+    else if (car_model == "ferrari_488_challenge_evo") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "lamborghini_huracan_st_evo2") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "porsche_992_gt3_cup") return is_front ? 7.1497f : 6.7715f;
+    
+    return 10.0f;
 }
 
 double ACCProvider::get_acc_track_length(const String& track_name) const {

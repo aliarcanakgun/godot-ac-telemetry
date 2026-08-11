@@ -487,7 +487,7 @@ String ACProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "velocity_x") return "velocity_x";
     if (standard_name == "velocity_y") return "velocity_y";
     if (standard_name == "velocity_z") return "velocity_z";
-    if (standard_name == "local_velocity_x") return "localVelocity_x";
+    if (standard_name == "lateral_velocity") return "localVelocity_x";
     if (standard_name == "local_velocity_y") return "localVelocity_y";
     if (standard_name == "local_velocity_z") return "localVelocity_z";
     if (standard_name == "local_angular_vel_x") return "localAngularVel_x";

@@ -26,6 +26,28 @@ inline godot::PackedFloat32Array to_float_array(const std::vector<T>& vec) {
 }
 
 template<typename T>
+inline godot::PackedFloat32Array to_float_array_offset(const std::vector<T>& vec, float offset) {
+    godot::PackedFloat32Array arr;
+    arr.resize(vec.size());
+    float* ptr = arr.ptrw();
+    for (size_t i = 0; i < vec.size(); ++i) {
+        ptr[i] = static_cast<float>(vec[i]) + offset;
+    }
+    return arr;
+}
+
+template<typename T>
+inline godot::PackedFloat32Array to_float_array_multiplier(const std::vector<T>& vec, float multiplier) {
+    godot::PackedFloat32Array arr;
+    arr.resize(vec.size());
+    float* ptr = arr.ptrw();
+    for (size_t i = 0; i < vec.size(); ++i) {
+        ptr[i] = static_cast<float>(vec[i]) * multiplier;
+    }
+    return arr;
+}
+
+template<typename T>
 inline godot::PackedInt32Array to_int_array(const std::vector<T>& vec) {
     godot::PackedInt32Array arr;
     arr.resize(vec.size());
