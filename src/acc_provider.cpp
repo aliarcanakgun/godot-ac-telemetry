@@ -781,7 +781,7 @@ String ACCProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "position") return "position";
     if (standard_name == "is_in_pit") return "isInPit";
     if (standard_name == "is_in_pit_lane") return "isInPitLane";
-    if (standard_name == "current_sector_index") return "currentSectorIndex";
+    if (standard_name == "current_sector") return "currentSectorIndex";
     if (standard_name == "last_sector_time") return "lastSectorTime";
     if (standard_name == "penalty_time") return "penaltyTime";
     if (standard_name == "flag") return "flag";
@@ -1336,6 +1336,14 @@ float ACCProvider::get_acc_bbias_offset(const String& car_model) const {
     
     // gt3- 2021
     else if (car_model == "bmw_m4_gt3") return -14.0f;
+
+    // gt3 - 2023
+    else if (car_model == "mclaren_720s_gt3_evo") return -17.0f;
+    else if (car_model == "porsche_992_gt3_r") return -21.0f;
+    else if (car_model == "lamborghini_huracan_gt3_evo2") return -14.0f;
+    
+    // gt3 - 2024
+    else if (car_model == "ford_mustang_gt3") return -14.0f;
     
     // challengers pack - 2022
     else if (car_model == "audi_r8_lms_evo_ii") return -14.0f;
@@ -1380,7 +1388,7 @@ float ACCProvider::get_acc_bpressure_multiplier(const String& car_model, const b
     else if (car_model == "alpine_a110_gt4") return 10.0f;
     else if (car_model == "amr_v8_vantage_gt4") return 10.0f;
     else if (car_model == "audi_r8_gt4") return 10.0f;
-    else if (car_model == "bmw_m4_gt4") return is_front ? 7.2886 : 10.0f;
+    else if (car_model == "bmw_m4_gt4") return is_front ? 7.2886f : 10.0f;
     else if (car_model == "chevrolet_camaro_gt4r") return 10.0f;
     else if (car_model == "ginetta_g55_gt4") return 10.0f;
     else if (car_model == "ktm_xbow_gt4") return 10.0f;
@@ -1395,6 +1403,14 @@ float ACCProvider::get_acc_bpressure_multiplier(const String& car_model, const b
     
     // gt3- 2021
     else if (car_model == "bmw_m4_gt3") return 7.9585f;
+
+    // gt3 - 2023
+    else if (car_model == "mclaren_720s_gt3_evo") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "lamborghini_huracan_gt3_evo2") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "porsche_992_gt3_r") return is_front ? 7.1497f : 6.7715f;
+
+    // gt3 - 2024
+    else if (car_model == "ford_mustang_gt3") return 7.9585f;
     
     // challengers pack - 2022
     else if (car_model == "audi_r8_lms_evo_ii") return is_front ? 7.5980f : 7.4855f;
@@ -1403,76 +1419,76 @@ float ACCProvider::get_acc_bpressure_multiplier(const String& car_model, const b
     else if (car_model == "lamborghini_huracan_st_evo2") return is_front ? 7.5980f : 7.4855f;
     else if (car_model == "porsche_992_gt3_cup") return is_front ? 7.1497f : 6.7715f;
     
-    return 10.0f;
+    return 7.9585f;
 }
 
-double ACCProvider::get_acc_track_length(const String& track_name) const {
-    if (track_name == "barcelona") return 4655.0;
-    if (track_name == "brands_hatch") return 3908.0;
-    if (track_name == "hungaroring") return 4381.0;
-    if (track_name == "misano") return 4226.0;
-    if (track_name == "monza") return 5793.0;
-    if (track_name == "nurburgring") return 5137.0;
-    if (track_name == "paul_ricard") return 5770.0;
-    if (track_name == "silverstone") return 5891.0;
-    if (track_name == "spa") return 7004.0;
-    if (track_name == "zandvoort") return 4252.0;
-    if (track_name == "zolder") return 4011.0;
+float ACCProvider::get_acc_track_length(const String& track_name) const {
+    if (track_name == "barcelona") return 4655.0f;
+    if (track_name == "brands_hatch") return 3908.0f;
+    if (track_name == "hungaroring") return 4381.0f;
+    if (track_name == "misano") return 4226.0f;
+    if (track_name == "monza") return 5793.0f;
+    if (track_name == "nurburgring") return 5137.0f;
+    if (track_name == "paul_ricard") return 5770.0f;
+    if (track_name == "silverstone") return 5891.0f;
+    if (track_name == "spa") return 7004.0f;
+    if (track_name == "zandvoort") return 4252.0f;
+    if (track_name == "zolder") return 4011.0f;
 
-    if (track_name == "imola") return 4959.0;
-    if (track_name == "donington") return 4020.0;
-    if (track_name == "oulton_park") return 4307.0;
-    if (track_name == "snetterton") return 4779.0;
-    if (track_name == "kyalami") return 4522.0;
-    if (track_name == "laguna_seca") return 3602.0;
-    if (track_name == "mount_panorama") return 6213.0;
-    if (track_name == "suzuka") return 5807.0;
-    if (track_name == "cota") return 5513.0;
-    if (track_name == "indianapolis") return 4167.0;
-    if (track_name == "watkins_glen") return 5552.0;
-    if (track_name == "valencia") return 4005.0;
-    if (track_name == "red_bull_ring") return 4318.0;
-    if (track_name == "nuerburgring_24h") return 25300.0;
+    if (track_name == "imola") return 4909.0f; // maybe 4959?
+    if (track_name == "donington") return 4020.0f;
+    if (track_name == "oulton_park") return 4307.0f;
+    if (track_name == "snetterton") return 4779.0f;
+    if (track_name == "kyalami") return 4522.0f;
+    if (track_name == "laguna_seca") return 3602.0f;
+    if (track_name == "mount_panorama") return 6213.0f;
+    if (track_name == "suzuka") return 5807.0f;
+    if (track_name == "cota") return 5513.0f;
+    if (track_name == "indianapolis") return 4167.0f;
+    if (track_name == "watkins_glen") return 5552.0f;
+    if (track_name == "valencia") return 4005.0f;
+    if (track_name == "red_bull_ring") return 4318.0f;
+    if (track_name == "nurburgring_24h") return 25378.0f; // maybe 25300?
 
     // fallback if somehow acc provides it
-    if (dataStatic && dataStatic->trackSPlineLength > 0.0) {
+    if (dataStatic && dataStatic->trackSPlineLength > 0.0f) {
         return dataStatic->trackSPlineLength;
     }
     
-    return 0.0;
+    return 0.0f;
 }
 
 std::vector<float> ACCProvider::get_acc_sectors(const String& track_name) const {
     // real world sector distances in meters
     // (approximate to fia timing loops, acc spline might vary slightly)
-    double track_len = get_acc_track_length(track_name);
+    float track_len = get_acc_track_length(track_name);
 
-    if (track_name == "barcelona") return {(float)(1528 / track_len), (float)(3105 / track_len)};
-    if (track_name == "brands_hatch") return {(float)(1260 / track_len), (float)(2595 / track_len)};
-    if (track_name == "hungaroring") return {(float)(1405 / track_len), (float)(2871 / track_len)};
-    if (track_name == "misano") return {(float)(1425 / track_len), (float)(2850 / track_len)};
-    if (track_name == "monza") return {(float)(1724 / track_len), (float)(3877 / track_len)};
-    if (track_name == "nurburgring") return {(float)(1625 / track_len), (float)(3355 / track_len)};
-    if (track_name == "paul_ricard") return {(float)(1875 / track_len), (float)(3825 / track_len)};
-    if (track_name == "silverstone") return {(float)(1968 / track_len), (float)(4165 / track_len)};
-    if (track_name == "spa") return {(float)(2225 / track_len), (float)(5283 / track_len)};
-    if (track_name == "zandvoort") return {(float)(1440 / track_len), (float)(2880 / track_len)};
-    if (track_name == "zolder") return {(float)(1333 / track_len), (float)(2666 / track_len)};
+    if (track_name == "barcelona") return {1528.0f / track_len, 3105.0f / track_len};
+    if (track_name == "brands_hatch") return {1260.0f / track_len, 2595.0f / track_len};
+    if (track_name == "hungaroring") return {1405.0f / track_len, 2871.0f / track_len};
+    if (track_name == "misano") return {1425.0f / track_len, 2850.0f / track_len};
+    if (track_name == "monza") return {1724.0f / track_len, 3877.0f / track_len};
+    if (track_name == "nurburgring") return {1625.0f / track_len, 3355.0f / track_len};
+    if (track_name == "paul_ricard") return {1875.0f / track_len, 3825.0f / track_len};
+    if (track_name == "silverstone") return {1968.0f / track_len, 4165.0f / track_len};
+    if (track_name == "spa") return {2225.0f / track_len, 5283.0f / track_len};
+    if (track_name == "zandvoort") return {1440.0f / track_len, 2880.0f / track_len};
+    if (track_name == "zolder") return {1333.0f / track_len, 2666.0f / track_len};
 
-    if (track_name == "imola") return {(float)(1636 / track_len), (float)(3272 / track_len)};
-    if (track_name == "donington") return {(float)(1340 / track_len), (float)(2680 / track_len)};
-    if (track_name == "oulton_park") return {(float)(1435 / track_len), (float)(2870 / track_len)};
-    if (track_name == "snetterton") return {(float)(1593 / track_len), (float)(3186 / track_len)};
-    if (track_name == "kyalami") return {(float)(1507 / track_len), (float)(3014 / track_len)};
-    if (track_name == "laguna_seca") return {(float)(1200 / track_len), (float)(2400 / track_len)};
-    if (track_name == "mount_panorama") return {(float)(2071 / track_len), (float)(4142 / track_len)};
-    if (track_name == "suzuka") return {(float)(1935 / track_len), (float)(3870 / track_len)};
-    if (track_name == "cota") return {(float)(1837 / track_len), (float)(3674 / track_len)};
-    if (track_name == "indianapolis") return {(float)(1397 / track_len), (float)(2794 / track_len)};
-    if (track_name == "watkins_glen") return {(float)(1810 / track_len), (float)(3620 / track_len)};
-    if (track_name == "valencia") return {(float)(1335 / track_len), (float)(2670 / track_len)};
-    if (track_name == "red_bull_ring") return {(float)(1439 / track_len), (float)(2878 / track_len)};
-    if (track_name == "nuerburgring_24h") return {(float)(8459 / track_len), (float)(16918 / track_len)};
+    if (track_name == "imola") return {1636.0f / track_len, 3272.0f / track_len};
+    if (track_name == "donington") return {1340.0f / track_len, 2680.0f / track_len};
+    if (track_name == "oulton_park") return {1435.0f / track_len, 2870.0f / track_len};
+    if (track_name == "snetterton") return {1593.0f / track_len, 3186.0f / track_len};
+    if (track_name == "kyalami") return {1507.0f / track_len, 3014.0f / track_len};
+    if (track_name == "laguna_seca") return {1200.0f / track_len, 2400.0f / track_len};
+    if (track_name == "mount_panorama") return {2071.0f / track_len, 4142.0f / track_len};
+    if (track_name == "suzuka") return {1935.0f / track_len, 3870.0f / track_len};
+    if (track_name == "cota") return {1837.0f / track_len, 3674.0f / track_len};
+    if (track_name == "indianapolis") return {1397.0f / track_len, 2794.0f / track_len};
+    if (track_name == "watkins_glen") return {1810.0f / track_len, 3620.0f / track_len};
+    if (track_name == "valencia") return {1335.0f / track_len, 2670.0f / track_len};
+    if (track_name == "red_bull_ring") return {1439.0f / track_len, 2878.0f / track_len};
+    if (track_name == "nuerburgring_24h") return {8459.0f / track_len, 16918.0f / track_len};
     
     return {1.0f/3.0f, 2.0f/3.0f}; // fallback for 3 sectors
 }
@@ -1535,7 +1551,25 @@ void ACCProvider::logging_loop() {
                 std::this_thread::sleep_until(next_tick);
                 continue;
             }
+            int packet_diff_global = dataPhysics->packetId - last_physics_packet_id;
             last_physics_packet_id = dataPhysics->packetId;
+
+            static int pause_recovery_counter = 0;
+            
+            // if resumed from pause or heavy lag, graphic and physics memory become desynced.
+            if (packet_diff_global > 100 && !sessions_data.empty()) {
+                pause_recovery_counter = 50; // ignore the next 50ms of data to allow them to resync
+            }
+            
+            if (pause_recovery_counter > 0) {
+                pause_recovery_counter--;
+                continue;
+            }
+            
+            // detect the exact moment of pausing where Physics instantly zeroes out but Graphic is still LIVE
+            if (dataPhysics->rpms == 0 && dataPhysics->speedKmh == 0.0f && dataPhysics->gas == 0.0f) {
+                continue;
+            }
 
             {
                 std::lock_guard<std::mutex> lock(data_mutex);
@@ -1561,6 +1595,8 @@ void ACCProvider::logging_loop() {
                 // making it the most mathematically stable boundary for ui rendering.
                 if (current_graphic_norm_pos < 0.05f && last_graphic_norm_pos > 0.95f) {
                     lap_changed = true;
+                } else if (std::abs(current_graphic_norm_pos - last_graphic_norm_pos) > 0.2f) {
+                    lap_changed = true; // teleport detected
                 }
                 last_graphic_norm_pos = current_graphic_norm_pos;
                 
@@ -2225,7 +2261,7 @@ Dictionary ACCProvider::get_loaded_session_lap_stats(int lap_index) {
     }
 
     // try to get the exact lap_time and final sector time from the next lap
-    if (lap_index + 1 < loaded_session_data.size() && !loaded_session_data[lap_index + 1].timestamp.empty()) {
+    if (is_completed && lap_index + 1 < loaded_session_data.size() && !loaded_session_data[lap_index + 1].timestamp.empty()) {
         const auto &next_lap = loaded_session_data[lap_index + 1];
         
         lap_time = 0;
@@ -2236,17 +2272,14 @@ Dictionary ACCProvider::get_loaded_session_lap_stats(int lap_index) {
             lap_time = lap.iCurrentTime.back();
         }
         
-        if (is_completed) {
-            for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
-                if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
-                    sector_times[current_sec_idx] = next_lap.lastSectorTime[k];
-                    break;
-                }
+        for (size_t k = 0; k < next_lap.currentSectorIndex.size(); k++) {
+            if (next_lap.currentSectorIndex[k] == 0 && next_lap.lastSectorTime[k] > 0) {
+                sector_times[current_sec_idx] = next_lap.lastSectorTime[k];
+                break;
             }
         }
     } else {
         lap_time = lap.iCurrentTime.empty() ? 0 : lap.iCurrentTime.back();
-        is_completed = false;
     }
 
     stats["lap_time_ms"] = lap_time;

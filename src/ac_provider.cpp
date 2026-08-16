@@ -658,7 +658,7 @@ String ACProvider::get_internal_channel_name(const String& standard_name) {
     if (standard_name == "position") return "position";
     if (standard_name == "is_in_pit") return "isInPit";
     if (standard_name == "is_in_pit_lane") return "isInPitLane";
-    if (standard_name == "current_sector_index") return "currentSectorIndex";
+    if (standard_name == "current_sector") return "currentSectorIndex";
     if (standard_name == "last_sector_time") return "lastSectorTime";
     if (standard_name == "penalty_time") return "penaltyTime";
     if (standard_name == "flag") return "flag";

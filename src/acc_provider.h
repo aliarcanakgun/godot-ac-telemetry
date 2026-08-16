@@ -6,8 +6,6 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
-#include <chrono>
-#include <cstdio>
 #include <windows.h>
 
 namespace godot {
@@ -71,7 +69,7 @@ public:
     
     float get_acc_bbias_offset(const String& car_model) const;
     float get_acc_bpressure_multiplier(const String& car_model, const bool is_front) const;
-    double get_acc_track_length(const String& track_name) const;
+    float get_acc_track_length(const String& track_name) const;
     std::vector<float> get_acc_sectors(const String& track_name) const;
 
     // ISimProvider impl

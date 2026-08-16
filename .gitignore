@@ -5,6 +5,9 @@
 *.os
 *.o
 *.pyc
+compile_commands.json
+.vscode
+.cache
 
 # Compiled Binaries
 src/gen/doc_data.gen.cpp
