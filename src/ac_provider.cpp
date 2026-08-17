@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cmath>
 #include <windows.h>
+#include <map>
 
 using namespace godot;
 
@@ -771,7 +772,16 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
         float top_speed = 0.0f;
         int current_sec_idx = lap.currentSectorIndex.empty() ? 0 : lap.currentSectorIndex[0];
 
+        std::map<int, float> sec_vmax;
+        std::map<int, float> sec_vmin;
+        std::map<int, float> sec_speed_sum;
+        std::map<int, int> sec_snapshot_count;
+        std::map<int, int> sec_throttle_count;
+        std::map<int, int> sec_brake_count;
+
         for (size_t j = 0; j < lap.speedKmh.size(); j++) {
+            int loop_sec_idx = lap.currentSectorIndex.empty() ? 0 : lap.currentSectorIndex[j];
+
             if (!lap.currentSectorIndex.empty() && lap.currentSectorIndex[j] != current_sec_idx) {
                 if (lap.lastSectorTime[j] > 0 && lap.lastSectorTime[j] <= lap.iCurrentTime[j] + 2000) {
                     sector_times[current_sec_idx] = lap.lastSectorTime[j];
@@ -787,9 +797,47 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
                 
                 current_sec_idx = lap.currentSectorIndex[j];
             }
-            if (lap.speedKmh[j] > top_speed) {
-                top_speed = lap.speedKmh[j];
+            
+            float speed = lap.speedKmh[j];
+            float gas = j < lap.gas.size() ? lap.gas[j] : 0.0f;
+            float brake = j < lap.brake.size() ? lap.brake[j] : 0.0f;
+
+            if (!sec_vmax.count(loop_sec_idx)) {
+                sec_vmax[loop_sec_idx] = speed;
+                sec_vmin[loop_sec_idx] = speed;
+                sec_speed_sum[loop_sec_idx] = 0.0f;
+                sec_snapshot_count[loop_sec_idx] = 0;
+                sec_throttle_count[loop_sec_idx] = 0;
+                sec_brake_count[loop_sec_idx] = 0;
             }
+
+            if (speed > sec_vmax[loop_sec_idx]) sec_vmax[loop_sec_idx] = speed;
+            if (speed < sec_vmin[loop_sec_idx]) sec_vmin[loop_sec_idx] = speed;
+            sec_speed_sum[loop_sec_idx] += speed;
+            sec_snapshot_count[loop_sec_idx]++;
+            
+            if (gas > 0.05f) sec_throttle_count[loop_sec_idx]++;
+            if (brake > 0.05f) sec_brake_count[loop_sec_idx]++;
+
+            if (speed > top_speed) {
+                top_speed = speed;
+            }
+        }
+
+        Dictionary sectors_data;
+        for (const auto& pair : sec_snapshot_count) {
+            int s_idx = pair.first;
+            int count = pair.second;
+            if (count == 0) continue;
+            
+            Dictionary s_dict;
+            s_dict["vmax_kmh"] = sec_vmax[s_idx];
+            s_dict["vmin_kmh"] = sec_vmin[s_idx];
+            s_dict["avg_speed_kmh"] = sec_speed_sum[s_idx] / count;
+            s_dict["throttle_pct"] = (float)sec_throttle_count[s_idx] / count * 100.0f;
+            s_dict["brake_pct"] = (float)sec_brake_count[s_idx] / count * 100.0f;
+            
+            sectors_data[s_idx] = s_dict;
         }
 
         bool is_completed = false;
@@ -863,6 +911,7 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
         lap_stats["snapshot_count"] = (int)lap.speedKmh.size();
         lap_stats["is_completed"] = is_completed;
         lap_stats["is_valid"] = is_valid;
+        lap_stats["sectors_data"] = sectors_data;
 
         laps_arr.push_back(lap_stats);
 
