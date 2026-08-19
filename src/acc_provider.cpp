@@ -2078,10 +2078,36 @@ void ACCProvider::logging_loop() {
                     lap.currentSectorIndex.push_back(dataGraphic->currentSectorIndex);
                     lap.lastSectorTime.push_back(dataGraphic->lastSectorTime);
 
-                    int player_id = (dataGraphic->playerCarID >= 0 && dataGraphic->playerCarID < 60) ? dataGraphic->playerCarID : 0;
-                    lap.carCoordinates_x.push_back(dataGraphic->carCoordinates[player_id][0]);
-                    lap.carCoordinates_y.push_back(dataGraphic->carCoordinates[player_id][1]);
-                    lap.carCoordinates_z.push_back(dataGraphic->carCoordinates[player_id][2]);
+                    // dynamic car coordinate tracking
+                    // acc assigns unique connection ids (e.g. 1046) that easily exceed the 60 slot map limit.
+                    // to find our exact coordinate index without slowing down the 400Hz tick, we use a 3-step search:
+                    int player_id = dataGraphic->playerCarID;
+                    int found_index = 0;
+                    
+                    if (player_id >= 0 && player_id < 60 && dataGraphic->carID[player_id] == player_id) {
+                        // step 1 (offline/fast path): if id is small, it usually matches the index perfectly
+                        found_index = player_id;
+                    } else if (player_id >= 0) {
+                        if (last_player_car_index >= 0 && last_player_car_index < 60 && dataGraphic->carID[last_player_car_index] == player_id) {
+                            // step 2 (cache path): check if we are still at the same index as the last tick.
+                            // this hits 99.9% of the time, resulting in zero loop overhead.
+                            found_index = last_player_car_index;
+                        } else {
+                            // step 3 (fallback path): only runs when we first join or if the server shuffles the array.
+                            // we scan all 60 slots to find our id, and cache the index for the next tick.
+                            for (int i = 0; i < 60; ++i) {
+                                if (dataGraphic->carID[i] == player_id) {
+                                    found_index = i;
+                                    last_player_car_index = i;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    lap.carCoordinates_x.push_back(dataGraphic->carCoordinates[found_index][0]);
+                    lap.carCoordinates_y.push_back(dataGraphic->carCoordinates[found_index][1]);
+                    lap.carCoordinates_z.push_back(dataGraphic->carCoordinates[found_index][2]);
 
                     std::array<std::array<float, 3>, 60> coords_arr;
                     std::memcpy(coords_arr.data(), dataGraphic->carCoordinates, sizeof(coords_arr));

@@ -34,6 +34,7 @@ private:
     int last_lap_count = 0;
     int last_physics_packet_id = -1;
     int last_i_current_time = 0;
+    int last_player_car_index = 0;
     double last_recorded_meter = -1.0;
     String session_output_file_path = "";
 
