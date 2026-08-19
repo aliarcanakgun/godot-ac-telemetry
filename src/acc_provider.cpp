@@ -1388,6 +1388,7 @@ float ACCProvider::get_acc_bbias_offset(const String& car_model) const {
     else if (car_model == "mclaren_720s_gt3_evo") return -17.0f;
     else if (car_model == "porsche_992_gt3_r") return -21.0f;
     else if (car_model == "lamborghini_huracan_gt3_evo2") return -14.0f;
+    else if (car_model == "ferrari_296_gt3") return -17.0f;
     
     // gt3 - 2024
     else if (car_model == "ford_mustang_gt3") return -14.0f;
@@ -1398,6 +1399,15 @@ float ACCProvider::get_acc_bbias_offset(const String& car_model) const {
     else if (car_model == "ferrari_488_challenge_evo") return -13.0f;
     else if (car_model == "lamborghini_huracan_st_evo2") return -14.0f;
     else if (car_model == "porsche_992_gt3_cup") return -5.0f;
+
+    // gt2 pack - 2024
+    else if (car_model == "audi_r8_lms_gt2") return -14.0f;
+    else if (car_model == "ktm_xbow_gt2") return -20.0f;
+    else if (car_model == "maserati_mc20_gt2") return -14.0f;
+    else if (car_model == "mercedes_amg_gt2") return -14.0f;
+    else if (car_model == "brabham_bt62_gt2") return -14.0f; // not in-game but sits in pak
+    else if (car_model == "porsche_935") return -21.0f;
+    else if (car_model == "porsche_991ii_gt2_rs_cs_evo") return -21.0f;
     
     return 0.0f;
 }
@@ -1455,6 +1465,7 @@ float ACCProvider::get_acc_bpressure_multiplier(const String& car_model, const b
     else if (car_model == "mclaren_720s_gt3_evo") return is_front ? 7.5980f : 7.4855f;
     else if (car_model == "lamborghini_huracan_gt3_evo2") return is_front ? 7.5980f : 7.4855f;
     else if (car_model == "porsche_992_gt3_r") return is_front ? 7.1497f : 6.7715f;
+    else if (car_model == "ferrari_296_gt3") return is_front ? 7.5980f : 7.4855f;
 
     // gt3 - 2024
     else if (car_model == "ford_mustang_gt3") return 7.9585f;
@@ -1465,6 +1476,15 @@ float ACCProvider::get_acc_bpressure_multiplier(const String& car_model, const b
     else if (car_model == "ferrari_488_challenge_evo") return is_front ? 7.5980f : 7.4855f;
     else if (car_model == "lamborghini_huracan_st_evo2") return is_front ? 7.5980f : 7.4855f;
     else if (car_model == "porsche_992_gt3_cup") return is_front ? 7.1497f : 6.7715f;
+
+    // gt2 pack - 2024
+    else if (car_model == "audi_r8_lms_gt2") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "ktm_xbow_gt2") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "maserati_mc20_gt2") return is_front ? 7.5980f : 7.4855f;
+    else if (car_model == "mercedes_amg_gt2") return 7.9585f;
+    else if (car_model == "brabham_bt62_gt2") return is_front ? 7.5980f : 7.4855f; // not in-game but sits in pak
+    else if (car_model == "porsche_935") return is_front ? 7.1497f : 6.7715f;
+    else if (car_model == "porsche_991ii_gt2_rs_cs_evo") return is_front ? 7.1497f : 6.7715f;
     
     return 7.9585f;
 }
@@ -1482,7 +1502,7 @@ float ACCProvider::get_acc_track_length(const String& track_name) const {
     if (track_name == "zandvoort") return 4252.0f;
     if (track_name == "zolder") return 4011.0f;
 
-    if (track_name == "imola") return 4909.0f; // maybe 4959?
+    if (track_name == "imola") return 4909.0f;
     if (track_name == "donington") return 4020.0f;
     if (track_name == "oulton_park") return 4307.0f;
     if (track_name == "snetterton") return 4779.0f;
@@ -1495,7 +1515,7 @@ float ACCProvider::get_acc_track_length(const String& track_name) const {
     if (track_name == "watkins_glen") return 5552.0f;
     if (track_name == "valencia") return 4005.0f;
     if (track_name == "red_bull_ring") return 4318.0f;
-    if (track_name == "nurburgring_24h") return 25378.0f; // maybe 25300?
+    if (track_name == "nurburgring_24h") return 25378.0f;
 
     // fallback if somehow acc provides it
     if (dataStatic && dataStatic->trackSPlineLength > 0.0f) {
