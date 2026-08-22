@@ -117,11 +117,16 @@ void ACCProvider::update() {
     }
 }
 
+void ACCProvider::set_auto_save_callback(std::function<void(godot::String)> callback) {
+    auto_save_callback = callback;
+}
+
 String ACCProvider::start_capture(const String& output_file_path) {
     if (output_file_path.is_empty()) return "Output file path is empty.";
     if (is_logging) return "Already logging.";
     session_output_file_path = output_file_path;
 
+    session_type_counts.clear();
     sessions_data.clear();
     last_lap_count = 0;
     last_physics_packet_id = -1;
@@ -135,8 +140,6 @@ String ACCProvider::start_capture(const String& output_file_path) {
 }
 
 String ACCProvider::stop_capture(const String& output_file_path) {
-    // TODO: zstd compression can be added
-
     if (!is_connected_flag) return "ACC is not connected.";
     if (!is_logging) return "Telemetry is not working.";
 
@@ -147,78 +150,123 @@ String ACCProvider::stop_capture(const String& output_file_path) {
 
     std::lock_guard<std::mutex> lock(data_mutex);
 
+    if (sessions_data.empty()) return "No valid telemetry data was recorded.";
+    if (!dataStatic || !dataGraphic) return "Data pointer is null";
+
+    String output = output_file_path;
+    if (output.is_empty()) output = session_output_file_path;
+
+    int current_count = ++session_type_counts[dataGraphic->session];
+    String session_suffix = _get_session_suffix(dataGraphic->session);
+    if (current_count > 1) {
+        session_suffix += "_" + String::num(current_count);
+    }
+
+    String extension = output.get_extension();
+    String base_path = output.get_basename();
+    String final_path = base_path + session_suffix + "." + extension;
+
+    std::vector<ACC_LapDataChannels> data_to_save = std::move(sessions_data);
+    sessions_data.clear();
+    
+    ACC_SPageStatic static_copy = *dataStatic;
+
+    _flush_sessions_to_disk(std::move(data_to_save), static_copy, sample_interval, samples_per_meter, final_path);
+
+    return final_path;
+}
+
+String ACCProvider::_get_session_suffix(int session_enum) {
+    switch (session_enum) {
+        case ACC_UNKNOWN: return "";
+        case ACC_PRACTICE: return ".prac";
+        case ACC_QUALIFY: return ".quali";
+        case ACC_RACE: return ".race";
+        case ACC_HOTLAP: return ".hl";
+        case ACC_TIMEATTACK: return ".ta";
+        case ACC_DRIFT: return ".drift";
+        case ACC_DRAG: return ".drag";
+        case ACC_HOTSTINT: return ".hs";
+        case ACC_HOTSTINTSUPERPOLE: return ".sp";
+        default: return "";
+    }
+}
+
+void ACCProvider::_flush_sessions_to_disk(std::vector<ACC_LapDataChannels> data_to_save, ACC_SPageStatic static_data_copy, double save_interval, double save_spm, String path) {
+    // TODO: zstd compression can be added
+    
     // remove empty/junk laps
-    for (auto it = sessions_data.begin(); it != sessions_data.end(); ) {
+    for (auto it = data_to_save.begin(); it != data_to_save.end(); ) {
         if (it->speedKmh.empty() || it->iCurrentTime.empty() || it->timestamp.size() < 10) {
-            it = sessions_data.erase(it);
+            it = data_to_save.erase(it);
         } else {
             ++it;
         }
     }
     
-    if (sessions_data.empty()) return "No valid telemetry data was recorded.";
+    if (data_to_save.empty()) return; // nothing to save
 
-    if (dataStatic) {
-        std::vector<float> boundaries = get_acc_sectors(wchar_to_gdstring(dataStatic->track, 33).to_lower());
-        for (auto& lap : sessions_data) {
-            if (lap.speedKmh.empty()) continue;
-            int current_sector = 0;
-            for (size_t j = 0; j < lap.normalizedCarPosition.size(); j++) {
-                float pos = lap.normalizedCarPosition[j];
-                if (current_sector < boundaries.size() && pos >= boundaries[current_sector]) {
-                    current_sector++;
-                }
-                if (j < lap.currentSectorIndex.size()) {
-                    lap.currentSectorIndex[j] = current_sector;
-                }
+    std::vector<float> boundaries = get_acc_sectors(wchar_to_gdstring(static_data_copy.track, 33).to_lower());
+    for (auto& lap : data_to_save) {
+        if (lap.speedKmh.empty()) continue;
+        int current_sector = 0;
+        
+        // initialize correct sector for the starting position of the lap
+        if (!lap.normalizedCarPosition.empty()) {
+            float start_pos = lap.normalizedCarPosition[0];
+            while (current_sector < boundaries.size() && start_pos >= boundaries[current_sector]) {
+                current_sector++;
+            }
+        }
+
+        for (size_t j = 0; j < lap.normalizedCarPosition.size(); j++) {
+            float pos = lap.normalizedCarPosition[j];
+            while (current_sector < boundaries.size() && pos >= boundaries[current_sector]) {
+                current_sector++;
+            }
+            if (j < lap.currentSectorIndex.size()) {
+                lap.currentSectorIndex[j] = current_sector;
             }
         }
     }
     
-    String output = output_file_path;
-    if (output.is_empty()) output = session_output_file_path;
-
-    String os_path = output;
+    String os_path = path;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }
 
     CharString cs = os_path.utf8();
-    std::string path(cs.get_data(), cs.length());
+    std::string filepath(cs.get_data(), cs.length());
 
-    std::ofstream outfile(path, std::ios::binary);
-    if (!outfile.is_open()) return "Could not open file for writing";
+    std::ofstream outfile(filepath, std::ios::binary);
+    if (!outfile.is_open()) return;
 
     CharString utf8_signature = save_file_signature.utf8();
     outfile.write(utf8_signature.get_data(), utf8_signature.length());
-    if (outfile.fail()) { outfile.close(); return "Write error"; }
+    if (outfile.fail()) { outfile.close(); return; }
 
-    if (!dataStatic) { outfile.close(); return "Static data pointer is null"; }
-    outfile.write(reinterpret_cast<const char*>(dataStatic), sizeof(ACC_SPageStatic));
-    if (outfile.fail()) { outfile.close(); return "Write error"; }
+    outfile.write(reinterpret_cast<const char*>(&static_data_copy), sizeof(ACC_SPageStatic));
+    if (outfile.fail()) { outfile.close(); return; }
 
-    outfile.write(reinterpret_cast<const char*>(&sample_interval), sizeof(double));
-    outfile.write(reinterpret_cast<const char*>(&samples_per_meter), sizeof(double));
+    outfile.write(reinterpret_cast<const char*>(&save_interval), sizeof(double));
+    outfile.write(reinterpret_cast<const char*>(&save_spm), sizeof(double));
 
-    uint64_t total_laps = sessions_data.size();
+    uint64_t total_laps = data_to_save.size();
     outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
 
     std::streampos offsets_pos = outfile.tellp();
     std::vector<uint64_t> lap_offsets(total_laps, 0);
     outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
 
-    for (uint64_t idx = 0; idx < sessions_data.size(); ++idx) {
+    for (uint64_t idx = 0; idx < data_to_save.size(); ++idx) {
         lap_offsets[idx] = outfile.tellp();
-        sessions_data[idx].write_to_stream(outfile);
+        data_to_save[idx].write_to_stream(outfile);
     }
 
     outfile.seekp(offsets_pos);
     outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
 
     outfile.close();
-    sessions_data.clear();
-
-    return os_path;
 }
 
 bool ACCProvider::is_logging_active() const {
@@ -551,7 +599,7 @@ Dictionary ACCProvider::get_session_metadata_from_file(const String& file_path) 
         }
         
         if (lap_data.speedKmh.empty()) continue;
-        
+
         if (!lap_data.normalizedCarPosition.empty()) {
             float base_offset = 0.0f;
             float prev_pos = lap_data.normalizedCarPosition[0];
@@ -1105,8 +1153,43 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
                     total_progression += diff;
                 }
             }
-            if (total_progression > 0.90f) {
-                is_completed = true;
+            if (total_progression > 0.85f) {
+                if (i < count - 1) {
+                    float last_pos = lap.normalizedCarPosition.back();
+                    float next_pos = laps[i + 1].normalizedCarPosition.front();
+                    // check if it wrapped around the finish line
+                    if (last_pos > 0.90f && next_pos < 0.10f) {
+                        is_completed = true;
+                    }
+                }
+            }
+        }
+
+        bool is_valid = is_completed;
+        if (is_valid && !lap.isValidLap.empty() && !lap.iCurrentTime.empty()) {
+            bool found_invalid = false;
+            for (size_t k = 0; k < lap.isValidLap.size(); k++) {
+                if (lap.isValidLap[k] == 0) {
+                    found_invalid = true;
+                    break;
+                }
+            }
+            if (found_invalid) {
+                is_valid = false;
+            }
+            
+            if (is_valid) {
+                size_t p_size = lap.penaltyTime.size();
+                size_t f_size = lap.flag.size();
+                size_t pit_size = lap.isInPitLane.size();
+                size_t min_size = std::min({p_size, f_size, pit_size});
+                
+                for (size_t k = 0; k < min_size; k++) {
+                    if (lap.penaltyTime[k] > 0.0f || lap.flag[k] == ACC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
+                        is_valid = false;
+                        break;
+                    }
+                }
             }
         }
 
@@ -1128,18 +1211,53 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
             if (!next_lap.iLastTime.empty()) {
                 std::map<int, int> counts;
                 int max_count = 0;
-                int most_frequent_time = 0;
+                int next_most_frequent = 0;
                 for (int t : next_lap.iLastTime) {
                     if (t > 0 && t < INT_MAX) {
                         counts[t]++;
                         if (counts[t] > max_count) {
                             max_count = counts[t];
-                            most_frequent_time = t;
+                            next_most_frequent = t;
                         }
                     }
                 }
-                if (most_frequent_time > 0) {
-                    real_lap_time = most_frequent_time;
+
+                int curr_most_frequent = 0;
+                if (!lap.iLastTime.empty()) {
+                    std::map<int, int> curr_counts;
+                    int curr_max = 0;
+                    for (int t : lap.iLastTime) {
+                        if (t > 0 && t < INT_MAX) {
+                            curr_counts[t]++;
+                            if (curr_counts[t] > curr_max) {
+                                curr_max = curr_counts[t];
+                                curr_most_frequent = t;
+                            }
+                        }
+                    }
+                }
+
+                if (next_most_frequent > 0) {
+                    // if the game didn't update iLastTime across the finish line,
+                    // it usually means telemetry is stuck or lap was secretly rejected.
+                    // however, we cross-reference with the physical elapsed time to ensure
+                    // they didn't just drive the exact same millisecond.
+                    if (curr_most_frequent > 0 && next_most_frequent == curr_most_frequent) {
+                        int max_current_time = 0;
+                        for (int t : lap.iCurrentTime) {
+                            if (t > max_current_time && t < INT_MAX) max_current_time = t;
+                        }
+                        
+                        // if the stuck time is vastly different
+                        // from the true elapsed time, it's a bug.
+                        if (std::abs(next_most_frequent - max_current_time) > 50) {
+                            is_valid = false;
+                        } else {
+                            real_lap_time = next_most_frequent;
+                        }
+                    } else {
+                        real_lap_time = next_most_frequent;
+                    }
                 }
             }
         }
@@ -1177,68 +1295,7 @@ Dictionary ACCProvider::_calculate_session_metadata(const ACC_SPageStatic& stat,
                 sector_times[last_sec_idx] = lap_time - accumulated_time;
             }
         }
-
-        bool is_valid = is_completed;
-        if (is_valid && !lap.isValidLap.empty() && !lap.iCurrentTime.empty()) {
-            // acc's isValidLap is transient and can reset prematurely near the end of a lap.
-            // instead of checking a single snapshot, we scan the entire lap's validity.
-            // we ignore the first and last 5% of the normalized position to prevent
-            // timing line offsets from bleeding a 0 value from adjacent laps.
-            bool found_invalid = false;
-            if (lap.normalizedCarPosition.size() == lap.isValidLap.size()) {
-                for (size_t k = 0; k < lap.isValidLap.size(); k++) {
-                    float pos = lap.normalizedCarPosition[k];
-                    if (pos > 0.05f && pos < 0.95f) {
-                        if (lap.isValidLap[k] == 0) {
-                            found_invalid = true;
-                            break;
-                        }
-                    }
-                }
-            } else {
-                // fallback if sizes don't match: check the middle portion by index
-                size_t start_idx = lap.isValidLap.size() / 20; // 5%
-                size_t end_idx = lap.isValidLap.size() - start_idx; // 95%
-                for (size_t k = start_idx; k < end_idx; k++) {
-                    if (lap.isValidLap[k] == 0) {
-                        found_invalid = true;
-                        break;
-                    }
-                }
-            }
-            
-            if (found_invalid) {
-                is_valid = false;
-            }
-            
-            // still check for pitlane or penalty flags as hard invalidations.
-            // we apply the same 5% to 95% safety margin here to prevent flags or 
-            // pit entry/exit states from bleeding over the timing line.
-            if (is_valid) {
-                if (lap.normalizedCarPosition.size() == lap.penaltyTime.size()) {
-                    for (size_t k = 0; k < lap.penaltyTime.size(); k++) {
-                        float pos = lap.normalizedCarPosition[k];
-                        if (pos > 0.05f && pos < 0.95f) {
-                            if (lap.penaltyTime[k] > 0.0f || lap.flag[k] == ACC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
-                                is_valid = false;
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    // fallback if sizes don't match for some reason
-                    size_t start_idx = lap.penaltyTime.size() / 20;
-                    size_t end_idx = lap.penaltyTime.size() - start_idx;
-                    for (size_t k = start_idx; k < end_idx; k++) {
-                        if (lap.penaltyTime[k] > 0.0f || lap.flag[k] == ACC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
-                            is_valid = false;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
+        
         lap_stats["lap_time_ms"] = lap_time;
         lap_stats["sector_times_ms"] = sector_times;
         lap_stats["top_speed_kmh"] = top_speed;
@@ -1555,7 +1612,7 @@ std::vector<float> ACCProvider::get_acc_sectors(const String& track_name) const 
     if (track_name == "watkins_glen") return {1810.0f / track_len, 3620.0f / track_len};
     if (track_name == "valencia") return {1335.0f / track_len, 2670.0f / track_len};
     if (track_name == "red_bull_ring") return {1439.0f / track_len, 2878.0f / track_len};
-    if (track_name == "nuerburgring_24h") return {8459.0f / track_len, 16918.0f / track_len};
+    if (track_name == "nurburgring_24h") return {8459.0f / track_len, 16918.0f / track_len};
     
     return {1.0f/3.0f, 2.0f/3.0f}; // fallback for 3 sectors
 }
@@ -1573,6 +1630,10 @@ void ACCProvider::logging_loop() {
 
     wchar_t cached_track[33] = {0};
     double current_track_length = 0.0;
+    
+    // session tracking
+    int current_session_type = -1;
+    int current_session_index = -1;
 
     while (is_logging) {
         auto now = std::chrono::steady_clock::now();
@@ -1584,7 +1645,48 @@ void ACCProvider::logging_loop() {
 
         if (dataGraphic && dataPhysics) {
             
-            if (dataGraphic->status == AC_OFF) {
+            // session auto-split check
+            if (current_session_type == -1) {
+                current_session_type = dataGraphic->session;
+                current_session_index = dataGraphic->sessionIndex;
+            } else if (dataGraphic->session != ACC_UNKNOWN && (dataGraphic->session != current_session_type || dataGraphic->sessionIndex != current_session_index)) {
+                // session changed
+                if (!sessions_data.empty()) {
+                    std::lock_guard<std::mutex> lock(data_mutex);
+                    
+                    int current_count = ++session_type_counts[current_session_type];
+                    String session_suffix = _get_session_suffix(current_session_type);
+                    if (current_count > 1) {
+                        session_suffix += "_" + String::num(current_count);
+                    }
+
+                    String output = session_output_file_path;
+                    String extension = output.get_extension();
+                    String base_path = output.get_basename();
+                    String final_path = base_path + session_suffix + "." + extension;
+                    
+                    if (auto_save_callback) {
+                        auto_save_callback(final_path);
+                    }
+                    
+                    std::vector<ACC_LapDataChannels> data_to_save = std::move(sessions_data);
+                    sessions_data.clear();
+                    ACC_SPageStatic static_copy = *dataStatic;
+                    double save_interval = sample_interval;
+                    double save_spm = samples_per_meter;
+                    
+                    std::thread([this, data_to_save = std::move(data_to_save), static_copy, save_interval, save_spm, final_path]() mutable {
+                        this->_flush_sessions_to_disk(std::move(data_to_save), static_copy, save_interval, save_spm, final_path);
+                    }).detach();
+                }
+                
+                current_session_type = dataGraphic->session;
+                current_session_index = dataGraphic->sessionIndex;
+                last_lap_count = 0;
+                last_recorded_meter = -1.0;
+            }
+
+            if (dataGraphic->status == ACC_OFF) {
                 game_disconnected.store(true);
             }
 
@@ -1662,8 +1764,19 @@ void ACCProvider::logging_loop() {
                 // making it the most mathematically stable boundary for ui rendering.
                 if (current_graphic_norm_pos < 0.05f && last_graphic_norm_pos > 0.95f) {
                     lap_changed = true;
-                } else if (std::abs(current_graphic_norm_pos - last_graphic_norm_pos) > 0.2f) {
-                    lap_changed = true; // teleport detected
+                } else {
+                    float diff = current_graphic_norm_pos - last_graphic_norm_pos;
+                    if (diff < -0.5f) diff += 1.0f;
+                    if (diff > 0.5f) diff -= 1.0f;
+                    
+                    float teleport_threshold = 0.2f;
+                    if (current_track_length > 0) {
+                        teleport_threshold = 200.0f / current_track_length; // 200 meters
+                    }
+                    
+                    if (std::abs(diff) > teleport_threshold) {
+                        lap_changed = true; // teleport detected
+                    }
                 }
                 last_graphic_norm_pos = current_graphic_norm_pos;
                 

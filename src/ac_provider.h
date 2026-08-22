@@ -7,6 +7,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <map>
 
 namespace godot {
 
@@ -48,7 +49,11 @@ private:
     int loaded_session_lap_count = -1;
     std::vector<uint64_t> loaded_session_lap_offsets;
 
+    std::function<void(godot::String)> auto_save_callback;
+
     String save_file_signature = "ACTL";
+
+    std::map<int, int> session_type_counts;
 
     std::thread logging_thread;
     std::mutex data_mutex;
@@ -58,6 +63,9 @@ private:
     Dictionary _calculate_session_metadata(const AC_SPageStatic& stat, uint64_t count, const std::vector<AC_LapDataChannels>& laps);
     Dictionary _static_to_dict(const AC_SPageStatic &s);
     Dictionary _lap_to_dict(const AC_LapDataChannels& c);
+
+    void _flush_sessions_to_disk(std::vector<AC_LapDataChannels> data_to_save, AC_SPageStatic static_data_copy, double save_interval, double save_spm, String path);
+    String _get_session_suffix(int session_enum);
 
     void apply_math_conversions_in_place(AC_LapDataChannels& lap);
 
@@ -73,6 +81,7 @@ public:
     virtual bool is_connected() const override { return is_connected_flag; }
     virtual int get_provider_status() const override;
     virtual void update() override;
+    virtual void set_auto_save_callback(std::function<void(godot::String)> callback) override;
     virtual godot::String start_capture(const godot::String& output_file_path) override;
     virtual godot::String stop_capture(const godot::String& output_file_path = "") override;
     virtual bool is_logging_active() const override;

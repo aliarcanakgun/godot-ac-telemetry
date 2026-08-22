@@ -109,11 +109,16 @@ void ACProvider::update() {
     }
 }
 
+void ACProvider::set_auto_save_callback(std::function<void(godot::String)> callback) {
+    auto_save_callback = callback;
+}
+
 String ACProvider::start_capture(const String& output_file_path) {
     if (output_file_path.is_empty()) return "Output file path is empty.";
     if (is_logging) return "Already logging.";
     session_output_file_path = output_file_path;
 
+    session_type_counts.clear();
     sessions_data.clear();
     last_lap_count = 0;
     last_physics_packet_id = -1;
@@ -151,47 +156,89 @@ String ACProvider::stop_capture(const String& output_file_path) {
     String output = output_file_path;
     if (output.is_empty()) output = session_output_file_path;
 
-    String os_path = output;
+    int current_count = ++session_type_counts[dataGraphic->session];
+    String session_suffix = _get_session_suffix(dataGraphic->session);
+    if (current_count > 1) {
+        session_suffix += "_" + String::num(current_count);
+    }
+
+    String extension = output.get_extension();
+    String base_path = output.get_basename();
+    String final_path = base_path + session_suffix + "." + extension;
+
+    std::vector<AC_LapDataChannels> data_to_save = std::move(sessions_data);
+    sessions_data.clear();
+    
+    AC_SPageStatic static_copy = *dataStatic;
+
+    _flush_sessions_to_disk(std::move(data_to_save), static_copy, sample_interval, samples_per_meter, final_path);
+
+    return final_path;
+}
+
+String ACProvider::_get_session_suffix(int session_enum) {
+    switch (session_enum) {
+        case AC_UNKNOWN: return "";
+        case AC_PRACTICE: return ".prac";
+        case AC_QUALIFY: return ".quali";
+        case AC_RACE: return ".race";
+        case AC_HOTLAP: return ".hl";
+        case AC_TIME_ATTACK: return ".ta";
+        case AC_DRIFT: return ".drift";
+        case AC_DRAG: return ".drag";
+        default: return "";
+    }
+}
+
+void ACProvider::_flush_sessions_to_disk(std::vector<AC_LapDataChannels> data_to_save, AC_SPageStatic static_data_copy, double save_interval, double save_spm, String path) {
+    // remove empty/junk laps
+    for (auto it = data_to_save.begin(); it != data_to_save.end(); ) {
+        if (it->speedKmh.empty() || it->iCurrentTime.empty() || it->timestamp.size() < 10) {
+            it = data_to_save.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    if (data_to_save.empty()) return;
+
+    String os_path = path;
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }
 
     CharString cs = os_path.utf8();
-    std::string path(cs.get_data(), cs.length());
+    std::string std_path(cs.get_data(), cs.length());
 
-    std::ofstream outfile(path, std::ios::binary);
-    if (!outfile.is_open()) return "Could not open file for writing";
+    std::ofstream outfile(std_path, std::ios::binary);
+    if (!outfile.is_open()) return;
 
     CharString utf8_signature = save_file_signature.utf8();
     outfile.write(utf8_signature.get_data(), utf8_signature.length());
-    if (outfile.fail()) { outfile.close(); return "Write error"; }
+    if (outfile.fail()) { outfile.close(); return; }
 
-    if (!dataStatic) { outfile.close(); return "Static data pointer is null"; }
-    outfile.write(reinterpret_cast<const char*>(dataStatic), sizeof(AC_SPageStatic));
-    if (outfile.fail()) { outfile.close(); return "Write error"; }
+    outfile.write(reinterpret_cast<const char*>(&static_data_copy), sizeof(AC_SPageStatic));
+    if (outfile.fail()) { outfile.close(); return; }
 
-    outfile.write(reinterpret_cast<const char*>(&sample_interval), sizeof(double));
-    outfile.write(reinterpret_cast<const char*>(&samples_per_meter), sizeof(double));
+    outfile.write(reinterpret_cast<const char*>(&save_interval), sizeof(double));
+    outfile.write(reinterpret_cast<const char*>(&save_spm), sizeof(double));
 
-    uint64_t total_laps = sessions_data.size();
+    uint64_t total_laps = data_to_save.size();
     outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
 
     std::streampos offsets_pos = outfile.tellp();
     std::vector<uint64_t> lap_offsets(total_laps, 0);
     outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
 
-    for (uint64_t idx = 0; idx < sessions_data.size(); ++idx) {
+    for (uint64_t idx = 0; idx < data_to_save.size(); ++idx) {
         lap_offsets[idx] = outfile.tellp();
-        sessions_data[idx].write_to_stream(outfile);
+        data_to_save[idx].write_to_stream(outfile);
     }
 
     outfile.seekp(offsets_pos);
     outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
 
     outfile.close();
-    sessions_data.clear();
-
-    return os_path;
 }
 
 bool ACProvider::is_logging_active() const {
@@ -857,7 +904,22 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
             }
         }
 
+        bool is_valid = true;
+        size_t min_size = lap.numberOfTyresOut.size();
+        min_size = std::min(min_size, lap.penaltyTime.size());
+        min_size = std::min(min_size, lap.flag.size());
+        min_size = std::min(min_size, lap.isInPitLane.size());
+        
+        for (size_t k = 0; k < min_size; k++) {
+            if (lap.numberOfTyresOut[k] >= 4 || lap.penaltyTime[k] > 0.0f || lap.flag[k] == AC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
+                is_valid = false;
+                break;
+            }
+        }
+
         int next_lap_best_time = 0;
+        int real_lap_time = 0;
+        
         // try getting exact time from next lap if exists
         if (i + 1 < count) {
             const AC_LapDataChannels& next_lap = laps[i + 1];
@@ -867,13 +929,50 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
             }
 
             if (!next_lap.iLastTime.empty()) {
-                lap_time = 0;
+                std::map<int, int> counts;
+                int max_count = 0;
+                int next_most_frequent = 0;
                 for (int t : next_lap.iLastTime) {
-                    if (t > lap_time) lap_time = t;
+                    if (t > 0 && t < INT_MAX) {
+                        counts[t]++;
+                        if (counts[t] > max_count) {
+                            max_count = counts[t];
+                            next_most_frequent = t;
+                        }
+                    }
                 }
-            }
-            if (lap_time == 0 && !lap.iCurrentTime.empty()) {
-                lap_time = lap.iCurrentTime.back();
+
+                int curr_most_frequent = 0;
+                if (!lap.iLastTime.empty()) {
+                    std::map<int, int> curr_counts;
+                    int curr_max = 0;
+                    for (int t : lap.iLastTime) {
+                        if (t > 0 && t < INT_MAX) {
+                            curr_counts[t]++;
+                            if (curr_counts[t] > curr_max) {
+                                curr_max = curr_counts[t];
+                                curr_most_frequent = t;
+                            }
+                        }
+                    }
+                }
+
+                if (next_most_frequent > 0) {
+                    if (curr_most_frequent > 0 && next_most_frequent == curr_most_frequent) {
+                        int max_current_time = 0;
+                        for (int t : lap.iCurrentTime) {
+                            if (t > max_current_time && t < INT_MAX) max_current_time = t;
+                        }
+                        
+                        if (std::abs(next_most_frequent - max_current_time) > 50) {
+                            is_valid = false;
+                        } else {
+                            real_lap_time = next_most_frequent;
+                        }
+                    } else {
+                        real_lap_time = next_most_frequent;
+                    }
+                }
             }
 
             if (is_completed && !next_lap.currentSectorIndex.empty() && !next_lap.lastSectorTime.empty()) {
@@ -884,21 +983,24 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
                     }
                 }
             }
+        }
+        
+        if (real_lap_time > 0) {
+            lap_time = real_lap_time;
+        } else if (!lap.iCurrentTime.empty()) {
+            int max_time = 0;
+            for (int t : lap.iCurrentTime) {
+                if (t > max_time && t < INT_MAX) max_time = t;
+            }
+            lap_time = max_time;
         } else {
-            lap_time = lap.iCurrentTime.empty() ? 0 : lap.iCurrentTime.back();
+            lap_time = 0;
             is_completed = false;
         }
 
-        bool is_valid = is_completed;
         if (is_valid) {
-            for (size_t k = 0; k < lap.numberOfTyresOut.size(); k++) {
-                if (lap.numberOfTyresOut[k] >= 4 || lap.penaltyTime[k] > 0.0f || lap.flag[k] == AC_PENALTY_FLAG || lap.isInPitLane[k] == 1) {
-                    is_valid = false;
-                    break;
-                }
-            }
             // check if it's best. if it is, next lap's best time will be this lap's time
-            if (is_valid && !lap.iBestTime.empty() && lap.iBestTime[0] > 0 && lap_time > 0 && lap_time < lap.iBestTime[0]) {
+            if (!lap.iBestTime.empty() && lap.iBestTime[0] > 0 && lap_time > 0 && lap_time < lap.iBestTime[0]) {
                 if (next_lap_best_time > 0 && next_lap_best_time != lap_time) {
                     is_valid = false;
                 }
@@ -1009,6 +1111,7 @@ void ACProvider::logging_loop() {
     int graphic_stale_counter = 0;
     int local_last_graphic_packet_id = -1;
     int max_stale_ticks = static_cast<int>(3.0 / sample_interval); // 3 secs timeout
+    int current_session_type = -1;
 
     while (is_logging) {
         auto now = std::chrono::steady_clock::now();
@@ -1020,6 +1123,45 @@ void ACProvider::logging_loop() {
 
         if (dataGraphic && dataPhysics) {
             
+            // session auto-split check
+            if (current_session_type == -1) {
+                current_session_type = dataGraphic->session;
+            } else if (dataGraphic->session != AC_UNKNOWN && dataGraphic->session != current_session_type) {
+                // session changed
+                if (!sessions_data.empty()) {
+                    std::lock_guard<std::mutex> lock(data_mutex);
+                    
+                    int current_count = ++session_type_counts[current_session_type];
+                    String session_suffix = _get_session_suffix(current_session_type);
+                    if (current_count > 1) {
+                        session_suffix += "_" + String::num(current_count);
+                    }
+
+                    String output = session_output_file_path;
+                    String extension = output.get_extension();
+                    String base_path = output.get_basename();
+                    String final_path = base_path + session_suffix + "." + extension;
+                    
+                    if (auto_save_callback) {
+                        auto_save_callback(final_path);
+                    }
+                    
+                    std::vector<AC_LapDataChannels> data_to_save = std::move(sessions_data);
+                    sessions_data.clear();
+                    AC_SPageStatic static_copy = *dataStatic;
+                    double save_interval = sample_interval;
+                    double save_spm = samples_per_meter;
+                    
+                    std::thread([this, data_to_save = std::move(data_to_save), static_copy, save_interval, save_spm, final_path]() mutable {
+                        this->_flush_sessions_to_disk(std::move(data_to_save), static_copy, save_interval, save_spm, final_path);
+                    }).detach();
+                }
+                
+                current_session_type = dataGraphic->session;
+                last_lap_count = 0;
+                last_recorded_meter = -1.0;
+            }
+
             if (dataGraphic->status == AC_OFF) {
                 game_disconnected.store(true);
             }
@@ -1070,8 +1212,16 @@ void ACProvider::logging_loop() {
                         lap_changed = true;
                     }
                     
-                    float jump = std::abs(dataGraphic->normalizedCarPosition - last_pos);
-                    if (jump > 0.1f && !(last_pos > 0.8f && dataGraphic->normalizedCarPosition < 0.2f)) {
+                    float diff = dataGraphic->normalizedCarPosition - last_pos;
+                    if (diff < -0.5f) diff += 1.0f;
+                    if (diff > 0.5f) diff -= 1.0f;
+                    
+                    float teleport_threshold = 0.1f;
+                    if (dataStatic->trackSPlineLength > 0.0) {
+                        teleport_threshold = 200.0f / dataStatic->trackSPlineLength; // 200 meters
+                    }
+
+                    if (std::abs(diff) > teleport_threshold) {
                         lap_changed = true;
                     }
                 }

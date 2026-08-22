@@ -75,6 +75,7 @@ void SimTelemetryManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_channel_name", "standard_name"), &SimTelemetryManager::get_channel_name);
 
     ClassDB::add_signal("SimTelemetryManager", MethodInfo("connection_lost"));
+    ClassDB::add_signal("SimTelemetryManager", MethodInfo("session_auto_saved", PropertyInfo(Variant::STRING, "file_path")));
 
     ClassDB::bind_method(D_METHOD("get_sample_interval"), &SimTelemetryManager::get_sample_interval);
     ClassDB::bind_method(D_METHOD("set_sample_interval", "interval"), &SimTelemetryManager::set_sample_interval);
@@ -87,13 +88,20 @@ void SimTelemetryManager::_bind_methods() {
 }
 
 ISimProvider* SimTelemetryManager::_create_provider(const String& sim_id) {
+    ISimProvider* provider = nullptr;
     if (sim_id == "AC") {
-        return new ACProvider();
+        provider = new ACProvider();
     } else if (sim_id == "ACC") {
-        return new ACCProvider();
+        provider = new ACCProvider();
     }
-    // future providers (iracing, etc)
-    return nullptr;
+    
+    if (provider) {
+        provider->set_auto_save_callback([this](String path) {
+            this->call_deferred("emit_signal", "session_auto_saved", path);
+        });
+    }
+    
+    return provider;
 }
 
 String SimTelemetryManager::_detect_file_signature(const String& file_path) {

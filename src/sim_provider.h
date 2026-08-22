@@ -2,6 +2,7 @@
 
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <functional>
 
 namespace godot {
 
@@ -22,6 +23,8 @@ public:
     virtual bool is_connected() const = 0;
     virtual int get_provider_status() const = 0;
     virtual void update() = 0;
+    
+    virtual void set_auto_save_callback(std::function<void(godot::String)> callback) = 0;
     
     virtual godot::String load_session(const godot::String& file_path) = 0;
     virtual void close_session() = 0;
