@@ -1,9 +1,9 @@
 #include "sim_telemetry_manager.h"
 #include "ac_provider.h"
 #include "acc_provider.h"
+#include "driving_analyzer.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
-#include "helper.h"
 #include <fstream>
 #include <cmath>
 #include <windows.h>
@@ -70,7 +70,7 @@ void SimTelemetryManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_loaded_session_total_laps"), &SimTelemetryManager::get_loaded_session_total_laps);
     ClassDB::bind_method(D_METHOD("get_loaded_session_lap_stats", "lap_index"), &SimTelemetryManager::get_loaded_session_lap_stats);
     ClassDB::bind_method(D_METHOD("calculate_lap_time_delta", "target_file_path", "target_lap_index", "current_file_path", "current_lap_index", "reference_positions"), &SimTelemetryManager::calculate_lap_time_delta, DEFVAL(0), DEFVAL(""), DEFVAL(0), DEFVAL(PackedFloat32Array()));
-    
+    ClassDB::bind_method(D_METHOD("analyze_lap", "lap_data", "reference_lap_data"), &SimTelemetryManager::analyze_lap, DEFVAL(Dictionary()));
     ClassDB::bind_method(D_METHOD("get_array_min_max", "array"), &SimTelemetryManager::get_array_min_max);
     ClassDB::bind_method(D_METHOD("get_channel_name", "standard_name"), &SimTelemetryManager::get_channel_name);
 
@@ -352,6 +352,10 @@ String SimTelemetryManager::get_channel_name(const String& standard_name) {
         return active_provider->get_internal_channel_name(standard_name);
     }
     return standard_name;
+}
+
+Array SimTelemetryManager::analyze_lap(const Dictionary& lap_data, const Dictionary& reference_lap_data) {
+    return DrivingAnalyzer::analyze_lap(this, lap_data, reference_lap_data);
 }
 
 Vector2 SimTelemetryManager::get_array_min_max(const Variant& arr) {

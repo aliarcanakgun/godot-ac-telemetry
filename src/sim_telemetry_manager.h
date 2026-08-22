@@ -69,6 +69,9 @@ public:
     Dictionary get_loaded_session_lap_stats(int lap_index);
     Dictionary calculate_lap_time_delta(const String& target_file_path, int target_lap_index = 0, const String& current_file_path = "", int current_lap_index = 0, const PackedFloat32Array& reference_positions = PackedFloat32Array());
 
+    // analysis
+    Array analyze_lap(const Dictionary& lap_data, const Dictionary& reference_lap_data = Dictionary());
+
     // getters/setters
     double get_sample_interval() const { return sample_interval; }
     void set_sample_interval(double p_sample_interval) { 
