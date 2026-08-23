@@ -23,6 +23,7 @@ godot::Array DrivingAnalyzer::analyze_lap(SimTelemetryManager* sim, const godot:
     append_results(check_snap_oversteer(sim, lap));
     append_results(check_throttle_flutter(sim, lap));
     append_results(check_pedal_overlap(sim, lap));
+    append_results(check_loss_of_control(sim, lap));
 
     return errors;
 }
@@ -560,13 +561,248 @@ godot::Array DrivingAnalyzer::check_over_slowing(SimTelemetryManager* sim, const
 }
 
 godot::Array DrivingAnalyzer::check_snap_oversteer(SimTelemetryManager* sim, const godot::Dictionary& lap) {
-    // TODO: implement snap oversteer / jerk analysis logic
-    return godot::Array();
+    godot::Array results;
+    
+    String time_ch = sim->get_channel_name("i_current_time");
+    String steer_ch = sim->get_channel_name("steer_angle");
+    String pos_ch = sim->get_channel_name("normalized_car_position");
+
+    if (!lap.has(time_ch) || !lap.has(steer_ch) || !lap.has(pos_ch)) {
+        return results;
+    }
+
+    PackedInt32Array time_data = lap[time_ch];
+    PackedFloat32Array steer_data = lap[steer_ch];
+    PackedFloat32Array pos_data = lap[pos_ch];
+
+    int size = time_data.size();
+    if (size == 0 || size != steer_data.size() || size != pos_data.size()) {
+        return results;
+    }
+
+    const int32_t* t_ptr = time_data.ptr();
+    const float* st_ptr = steer_data.ptr();
+    const float* p_ptr = pos_data.ptr();
+
+    // snap oversteer / jerk analysis
+    // (second derivative of steering)
+    float prev_steer_rate = 0.0f;
+    int cooldown_until = 0;
+
+    for (int i = 1; i < size; ++i) {
+        float dt_sec = (t_ptr[i] - t_ptr[i - 1]) / 1000.0f;
+        if (dt_sec <= 0.001f) continue;
+
+        float d_steer = st_ptr[i] - st_ptr[i - 1];
+        float steer_rate = d_steer / dt_sec;
+
+        if (i > 1 && t_ptr[i] > cooldown_until) {
+            float d_rate = steer_rate - prev_steer_rate;
+            float jerk = std::abs(d_rate / dt_sec);
+
+            // if the jerk (second derivative) is extremely high, it means
+            // the steering direction changed violently (a snap counter-steer)
+            if (jerk > 8000.0f) { 
+                godot::Dictionary err;
+                err["type"] = "SNAP_OVERSTEER";
+                err["start_pos"] = p_ptr[i - 1];
+                err["end_pos"] = p_ptr[i];
+                err["score"] = jerk; // score is the jerk magnitude
+                results.push_back(err);
+                
+                // skip ahead 500ms to avoid flooding errors for the same snap
+                cooldown_until = t_ptr[i] + 500;
+            }
+        }
+        prev_steer_rate = steer_rate;
+    }
+    return results;
 }
 
 godot::Array DrivingAnalyzer::check_throttle_flutter(SimTelemetryManager* sim, const godot::Dictionary& lap) {
-    // TODO: implement throttle flutter logic
-    return godot::Array();
+    godot::Array results;
+    
+    String time_ch = sim->get_channel_name("i_current_time");
+    String gas_ch = sim->get_channel_name("throttle");
+    String pos_ch = sim->get_channel_name("normalized_car_position");
+
+    if (!lap.has(time_ch) || !lap.has(gas_ch) || !lap.has(pos_ch)) {
+        return results;
+    }
+
+    PackedInt32Array time_data = lap[time_ch];
+    PackedFloat32Array gas_data = lap[gas_ch];
+    PackedFloat32Array pos_data = lap[pos_ch];
+
+    int size = time_data.size();
+    if (size == 0 || size != gas_data.size() || size != pos_data.size()) {
+        return results;
+    }
+
+    const int32_t* t_ptr = time_data.ptr();
+    const float* g_ptr = gas_data.ptr();
+    const float* p_ptr = pos_data.ptr();
+
+    int zone_start_idx = -1;
+    bool in_zone = false;
+
+    auto analyze_zone = [&](int start_idx, int end_idx) {
+        if (end_idx - start_idx < 10) return; // not enough data
+
+        int n_samples = 0;
+        double sum_deriv = 0.0;
+        double sum_sq_deriv = 0.0;
+        float max_gas = 0.0f;
+
+        for (int j = start_idx + 1; j <= end_idx; ++j) {
+            float dt_sec = (t_ptr[j] - t_ptr[j - 1]) / 1000.0f;
+            if (dt_sec <= 0.001f) continue;
+
+            float db = g_ptr[j] - g_ptr[j - 1];
+            float deriv = db / dt_sec;
+
+            sum_deriv += deriv;
+            sum_sq_deriv += (deriv * deriv);
+            n_samples++;
+            
+            if (g_ptr[j] > max_gas) max_gas = g_ptr[j];
+        }
+
+        if (n_samples > 1 && max_gas > 40.0f) { // only care if gas went above 40%
+            double mean = sum_deriv / n_samples;
+            double variance = std::max(0.0, (sum_sq_deriv / n_samples) - (mean * mean));
+            double std_dev = std::sqrt(variance);
+            
+            // if standard deviation of throttle
+            // rate is very high, it means flutter
+            if (std_dev > 250.0f) { // 250 %/s fluctuation
+                godot::Dictionary err;
+                err["type"] = "THROTTLE_FLUTTER";
+                err["start_pos"] = p_ptr[start_idx];
+                err["end_pos"] = p_ptr[end_idx];
+                err["score"] = (float)std_dev; // standard deviation as flutter score
+                results.push_back(err);
+            }
+        }
+    };
+
+    for (int i = 0; i < size; ++i) {
+        if (g_ptr[i] > 5.0f && g_ptr[i] < 95.0f) { // partially on throttle
+            if (!in_zone) {
+                in_zone = true;
+                zone_start_idx = i;
+            }
+        } else {
+            if (in_zone) {
+                analyze_zone(zone_start_idx, i);
+                in_zone = false;
+            }
+        }
+    }
+    
+    // check if lap ended while in zone
+    if (in_zone) {
+        analyze_zone(zone_start_idx, size - 1);
+    }
+
+    return results;
+}
+
+godot::Array DrivingAnalyzer::check_loss_of_control(SimTelemetryManager* sim, const godot::Dictionary& lap) {
+    godot::Array results;
+    
+    String time_ch = sim->get_channel_name("i_current_time");
+    String vel_x_ch = sim->get_channel_name("lateral_velocity");
+    String vel_z_ch = sim->get_channel_name("local_velocity_z");
+    String yaw_ch = sim->get_channel_name("yaw_rate");
+    String pos_ch = sim->get_channel_name("normalized_car_position");
+
+    if (!lap.has(time_ch) || !lap.has(vel_x_ch) || !lap.has(vel_z_ch) || !lap.has(yaw_ch) || !lap.has(pos_ch)) {
+        return results;
+    }
+
+    PackedInt32Array time_data = lap[time_ch];
+    PackedFloat32Array vel_x_data = lap[vel_x_ch];
+    PackedFloat32Array vel_z_data = lap[vel_z_ch];
+    PackedFloat32Array yaw_data = lap[yaw_ch];
+    PackedFloat32Array pos_data = lap[pos_ch];
+
+    int size = time_data.size();
+    if (size == 0 || size != vel_x_data.size() || size != vel_z_data.size() || size != yaw_data.size() || size != pos_data.size()) {
+        return results;
+    }
+
+    const float* vx_ptr = vel_x_data.ptr();
+    const float* vz_ptr = vel_z_data.ptr();
+    const float* yaw_ptr = yaw_data.ptr();
+    const float* p_ptr = pos_data.ptr();
+
+    bool in_slide = false;
+    int slide_start_idx = -1;
+    float peak_slip = 0.0f;
+    float peak_yaw = 0.0f;
+
+    auto analyze_slide = [&](int start_idx, int end_idx) {
+        if (peak_slip > 8.0f && peak_yaw > 30.0f) {
+            godot::Dictionary err;
+            if (peak_slip > 35.0f) {
+                err["type"] = "LOSS_OF_CONTROL";
+            } else if (peak_slip > 15.0f) {
+                err["type"] = "DRIFT";
+            } else {
+                err["type"] = "MINOR_OVERSTEER";
+            }
+            err["start_pos"] = p_ptr[start_idx];
+            err["end_pos"] = p_ptr[end_idx];
+            err["score"] = peak_slip; // max slip angle reached
+            results.push_back(err);
+        }
+    };
+
+    for (int i = 0; i < size; ++i) {
+        float vx = vx_ptr[i];
+        float vz = vz_ptr[i];
+        
+        // ignore if car is too slow
+        // using ~18kmh threshold which is roughly 5.0 m/s for Vz
+        if (std::abs(vz) < 5.0f && std::abs(vx) < 5.0f) {
+            if (in_slide) {
+                analyze_slide(slide_start_idx, i - 1);
+                in_slide = false;
+            }
+            continue;
+        }
+
+        // slip angle = atan2(lateral_velocity, longitudinal_velocity)
+        float slip_angle = std::abs(std::atan2(vx, vz) * 180.0f / 3.14159265f);
+        float current_yaw = std::abs(yaw_ptr[i]);
+        
+        // if car is going backwards, slip angle approaches 180 deg
+        if (!in_slide) {
+            // trigger threshold: significant slip and rotation
+            if (slip_angle > 8.0f && current_yaw > 20.0f) {
+                in_slide = true;
+                slide_start_idx = i;
+                peak_slip = slip_angle;
+                peak_yaw = current_yaw;
+            }
+        } else {
+            if (slip_angle > peak_slip) peak_slip = slip_angle;
+            if (current_yaw > peak_yaw) peak_yaw = current_yaw;
+            
+            // end slide when car recovers grip
+            if (slip_angle < 5.0f) {
+                analyze_slide(slide_start_idx, i);
+                in_slide = false;
+            }
+        }
+    }
+    
+    if (in_slide) {
+        analyze_slide(slide_start_idx, size - 1);
+    }
+
+    return results;
 }
 
 } // namespace godot
