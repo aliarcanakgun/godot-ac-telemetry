@@ -106,3 +106,4 @@ public:
 VARIANT_ENUM_CAST(SimStatusType);
 VARIANT_ENUM_CAST(SimSessionType);
 VARIANT_ENUM_CAST(SimFlagType);
+VARIANT_ENUM_CAST(DrivingMistakeType);

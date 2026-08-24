@@ -73,7 +73,7 @@ godot::Array DrivingAnalyzer::check_pedal_overlap(SimTelemetryManager* sim, cons
                 int duration = t_ptr[i] - overlap_start_time;
                 if (duration > 200) { // > 200ms threshold
                     godot::Dictionary err;
-                    err["type"] = "PEDAL_OVERLAP";
+                    err["type"] = MISTAKE_PEDAL_OVERLAP;
                     err["start_pos"] = overlap_start_pos;
                     err["end_pos"] = p_ptr[i];
                     err["score"] = (float)duration; // raw duration mapping
@@ -89,7 +89,7 @@ godot::Array DrivingAnalyzer::check_pedal_overlap(SimTelemetryManager* sim, cons
         int duration = t_ptr[size - 1] - overlap_start_time;
         if (duration > 200) {
             godot::Dictionary err;
-            err["type"] = "PEDAL_OVERLAP";
+            err["type"] = MISTAKE_PEDAL_OVERLAP;
             err["start_pos"] = overlap_start_pos;
             err["end_pos"] = p_ptr[size - 1];
             err["score"] = (float)duration;
@@ -146,7 +146,7 @@ godot::Array DrivingAnalyzer::check_coasting(SimTelemetryManager* sim, const god
                 int duration = t_ptr[i] - coasting_start_time;
                 if (duration > 500) {
                     godot::Dictionary err;
-                    err["type"] = "COASTING";
+                    err["type"] = MISTAKE_COASTING;
                     err["start_pos"] = coasting_start_pos;
                     err["end_pos"] = p_ptr[i];
                     err["score"] = (float)duration;
@@ -161,7 +161,7 @@ godot::Array DrivingAnalyzer::check_coasting(SimTelemetryManager* sim, const god
         int duration = t_ptr[size - 1] - coasting_start_time;
         if (duration > 500) {
             godot::Dictionary err;
-            err["type"] = "COASTING";
+            err["type"] = MISTAKE_COASTING;
             err["start_pos"] = coasting_start_pos;
             err["end_pos"] = p_ptr[size - 1];
             err["score"] = (float)duration;
@@ -227,7 +227,7 @@ godot::Array DrivingAnalyzer::check_abs_abuse(SimTelemetryManager* sim, const go
                     float abs_ratio = (float)abs_active_time / (float)total_braking_time * 100.0f;
                     if (abs_ratio > 30.0f) { // 30% abs engagement
                         godot::Dictionary err;
-                        err["type"] = "ABS_ABUSE";
+                        err["type"] = MISTAKE_ABS_ABUSE;
                         err["start_pos"] = braking_start_pos;
                         err["end_pos"] = p_ptr[i];
                         err["score"] = abs_ratio;
@@ -246,7 +246,7 @@ godot::Array DrivingAnalyzer::check_abs_abuse(SimTelemetryManager* sim, const go
             float abs_ratio = (float)abs_active_time / (float)total_braking_time * 100.0f;
             if (abs_ratio > 30.0f) {
                 godot::Dictionary err;
-                err["type"] = "ABS_ABUSE";
+                err["type"] = MISTAKE_ABS_ABUSE;
                 err["start_pos"] = braking_start_pos;
                 err["end_pos"] = p_ptr[size - 1];
                 err["score"] = abs_ratio;
@@ -329,7 +329,7 @@ godot::Array DrivingAnalyzer::check_trail_braking(SimTelemetryManager* sim, cons
                 double std_dev = std::sqrt(variance);
                 
                 godot::Dictionary err;
-                err["type"] = "TRAIL_BRAKING_SMOOTHNESS";
+                err["type"] = MISTAKE_TRAIL_BRAKING_SMOOTHNESS;
                 err["start_pos"] = p_ptr[peak_idx];
                 err["end_pos"] = p_ptr[end_idx];
                 err["score"] = std::abs(min_deriv); // score as the peak release rate
@@ -412,7 +412,7 @@ godot::Array DrivingAnalyzer::check_shift_duration_and_downshift(SimTelemetryMan
                 int shift_duration = t_ptr[i] - neutral_start_time;
                 if (shift_duration > 500) { // 500ms threshold
                     godot::Dictionary err;
-                    err["type"] = "SLOW_SHIFT";
+                    err["type"] = MISTAKE_SLOW_SHIFT;
                     err["start_pos"] = neutral_start_pos;
                     err["end_pos"] = p_ptr[i];
                     err["score"] = (float)shift_duration;
@@ -430,7 +430,7 @@ godot::Array DrivingAnalyzer::check_shift_duration_and_downshift(SimTelemetryMan
             
             if (rpm_ratio > 0.95f) { // > 95% of max rpm
                 godot::Dictionary err;
-                err["type"] = "AGGRESSIVE_DOWNSHIFT";
+                err["type"] = MISTAKE_AGGRESSIVE_DOWNSHIFT;
                 err["start_pos"] = p_ptr[i];
                 err["end_pos"] = -1.0f; // point error
                 err["score"] = rpm_ratio * 100.0f; // score as percentage
@@ -443,7 +443,7 @@ godot::Array DrivingAnalyzer::check_shift_duration_and_downshift(SimTelemetryMan
         int shift_duration = t_ptr[size - 1] - neutral_start_time;
         if (shift_duration > 500) {
             godot::Dictionary err;
-            err["type"] = "SLOW_SHIFT";
+            err["type"] = MISTAKE_SLOW_SHIFT;
             err["start_pos"] = neutral_start_pos;
             err["end_pos"] = p_ptr[size - 1];
             err["score"] = (float)shift_duration;
@@ -542,7 +542,7 @@ godot::Array DrivingAnalyzer::check_over_slowing(SimTelemetryManager* sim, const
                             float min_spacing = 70.0f / track_length;
                             if (last_triggered_pos < 0.0f || std::abs(target_pos - last_triggered_pos) > min_spacing) {
                                 godot::Dictionary err;
-                                err["type"] = "OVER_SLOWING";
+                                err["type"] = MISTAKE_OVER_SLOWING;
                                 err["start_pos"] = target_pos;
                                 err["end_pos"] = -1.0f; // point error
                                 err["score"] = speed_diff; // score is the km/h difference
@@ -566,28 +566,33 @@ godot::Array DrivingAnalyzer::check_snap_oversteer(SimTelemetryManager* sim, con
     String time_ch = sim->get_channel_name("i_current_time");
     String steer_ch = sim->get_channel_name("steer_angle");
     String pos_ch = sim->get_channel_name("normalized_car_position");
+    String yaw_ch = sim->get_channel_name("yaw_rate");
 
-    if (!lap.has(time_ch) || !lap.has(steer_ch) || !lap.has(pos_ch)) {
+    if (!lap.has(time_ch) || !lap.has(steer_ch) || !lap.has(pos_ch) || !lap.has(yaw_ch)) {
         return results;
     }
 
     PackedInt32Array time_data = lap[time_ch];
     PackedFloat32Array steer_data = lap[steer_ch];
     PackedFloat32Array pos_data = lap[pos_ch];
+    PackedFloat32Array yaw_data = lap[yaw_ch];
 
     int size = time_data.size();
-    if (size == 0 || size != steer_data.size() || size != pos_data.size()) {
+    if (size == 0 || size != steer_data.size() || size != pos_data.size() || size != yaw_data.size()) {
         return results;
     }
 
     const int32_t* t_ptr = time_data.ptr();
     const float* st_ptr = steer_data.ptr();
     const float* p_ptr = pos_data.ptr();
+    const float* y_ptr = yaw_data.ptr();
 
     // snap oversteer / jerk analysis
-    // (second derivative of steering)
+    bool in_snap = false;
+    int snap_start_idx = -1;
+    float peak_jerk = 0.0f;
+    int snap_end_time = 0;
     float prev_steer_rate = 0.0f;
-    int cooldown_until = 0;
 
     for (int i = 1; i < size; ++i) {
         float dt_sec = (t_ptr[i] - t_ptr[i - 1]) / 1000.0f;
@@ -596,25 +601,45 @@ godot::Array DrivingAnalyzer::check_snap_oversteer(SimTelemetryManager* sim, con
         float d_steer = st_ptr[i] - st_ptr[i - 1];
         float steer_rate = d_steer / dt_sec;
 
-        if (i > 1 && t_ptr[i] > cooldown_until) {
+        if (i > 1) {
             float d_rate = steer_rate - prev_steer_rate;
             float jerk = std::abs(d_rate / dt_sec);
+            float current_yaw = std::abs(y_ptr[i]);
 
-            // if the jerk (second derivative) is extremely high, it means
-            // the steering direction changed violently (a snap counter-steer)
-            if (jerk > 8000.0f) { 
-                godot::Dictionary err;
-                err["type"] = "SNAP_OVERSTEER";
-                err["start_pos"] = p_ptr[i - 1];
-                err["end_pos"] = p_ptr[i];
-                err["score"] = jerk; // score is the jerk magnitude
-                results.push_back(err);
-                
-                // skip ahead 500ms to avoid flooding errors for the same snap
-                cooldown_until = t_ptr[i] + 500;
+            if (!in_snap) {
+                // for a real snap oversteer, we need high jerk,
+                // noticeable steering movement, and actual car rotation
+                if (jerk > 10000.0f && std::abs(steer_rate) > 150.0f && current_yaw > 15.0f) { 
+                    in_snap = true;
+                    snap_start_idx = i - 1;
+                    peak_jerk = jerk;
+                    snap_end_time = t_ptr[i] + 500; // 500ms duration for the region
+                }
+            } else {
+                if (jerk > peak_jerk) peak_jerk = jerk;
+
+                if (t_ptr[i] >= snap_end_time) {
+                    godot::Dictionary err;
+                    err["type"] = MISTAKE_SNAP_OVERSTEER;
+                    err["start_pos"] = p_ptr[snap_start_idx];
+                    err["end_pos"] = p_ptr[i];
+                    err["score"] = peak_jerk;
+                    results.push_back(err);
+                    
+                    in_snap = false;
+                }
             }
         }
         prev_steer_rate = steer_rate;
+    }
+
+    if (in_snap) {
+        godot::Dictionary err;
+        err["type"] = MISTAKE_SNAP_OVERSTEER;
+        err["start_pos"] = p_ptr[snap_start_idx];
+        err["end_pos"] = p_ptr[size - 1];
+        err["score"] = peak_jerk;
+        results.push_back(err);
     }
     return results;
 }
@@ -677,7 +702,7 @@ godot::Array DrivingAnalyzer::check_throttle_flutter(SimTelemetryManager* sim, c
             // rate is very high, it means flutter
             if (std_dev > 250.0f) { // 250 %/s fluctuation
                 godot::Dictionary err;
-                err["type"] = "THROTTLE_FLUTTER";
+                err["type"] = MISTAKE_THROTTLE_FLUTTER;
                 err["start_pos"] = p_ptr[start_idx];
                 err["end_pos"] = p_ptr[end_idx];
                 err["score"] = (float)std_dev; // standard deviation as flutter score
@@ -746,11 +771,11 @@ godot::Array DrivingAnalyzer::check_loss_of_control(SimTelemetryManager* sim, co
         if (peak_slip > 8.0f && peak_yaw > 30.0f) {
             godot::Dictionary err;
             if (peak_slip > 35.0f) {
-                err["type"] = "LOSS_OF_CONTROL";
+                err["type"] = MISTAKE_LOSS_OF_CONTROL;
             } else if (peak_slip > 15.0f) {
-                err["type"] = "DRIFT";
+                err["type"] = MISTAKE_DRIFT;
             } else {
-                err["type"] = "MINOR_OVERSTEER";
+                err["type"] = MISTAKE_MINOR_OVERSTEER;
             }
             err["start_pos"] = p_ptr[start_idx];
             err["end_pos"] = p_ptr[end_idx];
