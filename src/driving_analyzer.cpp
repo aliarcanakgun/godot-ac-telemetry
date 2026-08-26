@@ -25,19 +25,23 @@ godot::Array DrivingAnalyzer::analyze_lap(SimTelemetryManager* sim, const godot:
     append_results(check_pedal_overlap(sim, lap));
     append_results(check_loss_of_control(sim, lap));
 
+    for (int i = 0; i < errors.size(); ++i) {
+        godot::Dictionary err = errors[i];
+        err["id"] = i;
+        errors[i] = err;
+    }
+
     return errors;
 }
 
 godot::Array DrivingAnalyzer::check_pedal_overlap(SimTelemetryManager* sim, const godot::Dictionary& lap) {
     godot::Array results;
     
-    // get provider specific channel names for our standard names
     String time_ch = sim->get_channel_name("i_current_time");
     String gas_ch = sim->get_channel_name("throttle");
     String brake_ch = sim->get_channel_name("brake");
     String pos_ch = sim->get_channel_name("normalized_car_position"); // spline position
 
-    // validate required channels exist
     if (!lap.has(time_ch) || !lap.has(gas_ch) || !lap.has(brake_ch) || !lap.has(pos_ch)) {
         return results;
     }
