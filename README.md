@@ -11,13 +11,7 @@
 git clone --recurse-submodules https://github.com/aliarcanakgun/godot-ac-telemetry.git
 cd godot-ac-telemetry
 ```
-Before building the extension, you must compile the godot-cpp library. Navigate to the submodule folder and run SCons:
-```bash
-cd godot-cpp
-scons platform=windows target=template_debug # or template_release
-cd ..
-```
-* Finally, in the root folder, use the commands below to build the extension:
+* Finally, in the root folder, use the commands below to build the extension (godot-cpp will be compiled with the first build):
 ```bash
 # debug build
 scons platform=windows target=template_debug
@@ -27,7 +21,7 @@ scons platform=windows target=template_release
 ```
 
 ### Features:
-* **Multi-Sim Architecture:** Built on a modular `ISimProvider` structure. While Assetto Corsa is fully supported out of the box, the architecture is specifically designed to accommodate upcoming integrations for ACC, AC Evo and iRacing.
+* **Multi-Sim Architecture:** Built on a modular `ISimProvider` structure. While Assetto Corsa and Assetto Corsa Competizione are fully supported out of the box, the architecture is specifically designed to accommodate upcoming integrations for AC Evo, iRacing and other sims.
 * **Thread-Safe Background Logging:** Telemetry is polled safely in a background thread, preventing data loss during stutters and avoiding performance hits on the main Godot thread.
 * **Channel-Based Data Architecture:** Data is organized into channels (arrays of values over time or distance), making it drastically easier to plot graphs or run analytics in GDScript.
 * **Distance-Based & Time-Based Sampling:** Accurate distance-normalized telemetry alongside time-based intervals.
