@@ -654,6 +654,7 @@ godot::Array DrivingAnalyzer::check_throttle_flutter(SimTelemetryManager* sim, c
     String time_ch = sim->get_channel_name("i_current_time");
     String gas_ch = sim->get_channel_name("throttle");
     String pos_ch = sim->get_channel_name("normalized_car_position");
+    String gear_ch = sim->get_channel_name("gear");
 
     if (!lap.has(time_ch) || !lap.has(gas_ch) || !lap.has(pos_ch)) {
         return results;
@@ -668,9 +669,19 @@ godot::Array DrivingAnalyzer::check_throttle_flutter(SimTelemetryManager* sim, c
         return results;
     }
 
+    bool has_gear = lap.has(gear_ch);
+    PackedInt32Array gear_data;
+    if (has_gear) {
+        gear_data = lap[gear_ch];
+        if (gear_data.size() != size) {
+            has_gear = false;
+        }
+    }
+
     const int32_t* t_ptr = time_data.ptr();
     const float* g_ptr = gas_data.ptr();
     const float* p_ptr = pos_data.ptr();
+    const int32_t* gr_ptr = has_gear ? gear_data.ptr() : nullptr;
 
     int zone_start_idx = -1;
     bool in_zone = false;
@@ -678,10 +689,33 @@ godot::Array DrivingAnalyzer::check_throttle_flutter(SimTelemetryManager* sim, c
     auto analyze_zone = [&](int start_idx, int end_idx) {
         if (end_idx - start_idx < 10) return; // not enough data
 
+        if (has_gear && (t_ptr[end_idx] - t_ptr[start_idx] < 1500)) {
+            bool downshift_found = false;
+            int search_start = start_idx;
+            int search_end = end_idx;
+            while (search_start > 0 && (t_ptr[start_idx] - t_ptr[search_start]) < 300) search_start--;
+            while (search_end < size - 1 && (t_ptr[search_end] - t_ptr[end_idx]) < 300) search_end++;
+            
+            int prev_gear = -1;
+            for (int k = search_start; k <= search_end; ++k) {
+                if (gr_ptr[k] > 0) { // ignore neutral/reverse
+                    if (prev_gear != -1 && gr_ptr[k] < prev_gear) {
+                        downshift_found = true;
+                        break;
+                    }
+                    prev_gear = gr_ptr[k];
+                }
+            }
+            if (downshift_found) {
+                return; // likely a downshift auto-blip or manual heel-and-toe
+            }
+        }
+
         int n_samples = 0;
         double sum_deriv = 0.0;
         double sum_sq_deriv = 0.0;
         float max_gas = 0.0f;
+        float total_abs_movement = 0.0f;
 
         for (int j = start_idx + 1; j <= end_idx; ++j) {
             float dt_sec = (t_ptr[j] - t_ptr[j - 1]) / 1000.0f;
@@ -694,23 +728,33 @@ godot::Array DrivingAnalyzer::check_throttle_flutter(SimTelemetryManager* sim, c
             sum_sq_deriv += (deriv * deriv);
             n_samples++;
             
+            total_abs_movement += std::abs(db);
             if (g_ptr[j] > max_gas) max_gas = g_ptr[j];
         }
 
         if (n_samples > 1 && max_gas > 40.0f) { // only care if gas went above 40%
-            double mean = sum_deriv / n_samples;
-            double variance = std::max(0.0, (sum_sq_deriv / n_samples) - (mean * mean));
-            double std_dev = std::sqrt(variance);
+            float net_movement = std::abs(g_ptr[end_idx] - g_ptr[start_idx]);
             
-            // if standard deviation of throttle
-            // rate is very high, it means flutter
-            if (std_dev > 250.0f) { // 250 %/s fluctuation
-                godot::Dictionary err;
-                err["type"] = MISTAKE_THROTTLE_FLUTTER;
-                err["start_pos"] = p_ptr[start_idx];
-                err["end_pos"] = p_ptr[end_idx];
-                err["score"] = (float)std_dev; // standard deviation as flutter score
-                results.push_back(err);
+            // flutter implies the pedal is moving back and forth.
+            // if you just slowly or jaggedly release/apply,
+            // total movement is close to net movement.
+            // we require total movement to be significantly
+            // higher than net movement to call it flutter.
+            if (total_abs_movement > (net_movement * 1.5f + 20.0f)) {
+                double mean = sum_deriv / n_samples;
+                double variance = std::max(0.0, (sum_sq_deriv / n_samples) - (mean * mean));
+                double std_dev = std::sqrt(variance);
+                
+                // if standard deviation of throttle
+                // rate is very high, it means flutter
+                if (std_dev > 250.0f) { // 250 %/s fluctuation
+                    godot::Dictionary err;
+                    err["type"] = MISTAKE_THROTTLE_FLUTTER;
+                    err["start_pos"] = p_ptr[start_idx];
+                    err["end_pos"] = p_ptr[end_idx];
+                    err["score"] = (float)std_dev; // standard deviation as flutter score
+                    results.push_back(err);
+                }
             }
         }
     };

@@ -193,16 +193,17 @@ String ACCProvider::_get_session_suffix(int session_enum) {
 }
 
 void ACCProvider::_flush_sessions_to_disk(std::vector<ACC_LapDataChannels> data_to_save, ACC_SPageStatic static_data_copy, double save_interval, double save_spm, String path) {
-    // TODO: zstd compression can be added
-    
     // remove empty/junk laps
-    for (auto it = data_to_save.begin(); it != data_to_save.end(); ) {
-        if (it->speedKmh.empty() || it->iCurrentTime.empty() || it->timestamp.size() < 10) {
-            it = data_to_save.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    // NOTE: some checks will yield incorrect results
+    //       if the last lap is removed.
+
+    // for (auto it = data_to_save.begin(); it != data_to_save.end(); ) {
+    //     if (it->speedKmh.empty() || it->iCurrentTime.empty() || it->timestamp.size() < 10) {
+    //         it = data_to_save.erase(it);
+    //     } else {
+    //         ++it;
+    //     }
+    // }
     
     if (data_to_save.empty()) return; // nothing to save
 
@@ -290,6 +291,7 @@ void ACCProvider::apply_math_conversions_in_place(ACC_LapDataChannels& lap) {
     for (size_t i=0; i<lap.kersCharge.size(); ++i) lap.kersCharge[i] *= 100.0f;
     for (size_t i=0; i<lap.kersInput.size(); ++i) lap.kersInput[i] *= 100.0f;
     for (size_t i=0; i<lap.brakeBias.size(); ++i) lap.brakeBias[i] *= 100.0f;
+    for (size_t i=0; i<lap.clutch.size(); ++i) lap.clutch[i] = (1.0f - lap.clutch[i]) * 100.0f;
 
     // offset
     for (size_t i=0; i<lap.gear.size(); ++i) lap.gear[i] -= 1;
