@@ -9,10 +9,13 @@ import sys
 env = SConscript("godot-cpp/SConstruct")
 
 # Configures the 'src' directory as a source for header files.
-env.Append(CPPPATH=["src/"])
+env.Append(CPPPATH=["src/", "thirdparty/zstd/lib/"])
 
 # Collects all .cpp files in the 'src' folder as compile targets.
 sources = Glob("src/*.cpp")
+sources += Glob("thirdparty/zstd/lib/common/*.c")
+sources += Glob("thirdparty/zstd/lib/compress/*.c")
+sources += Glob("thirdparty/zstd/lib/decompress/*.c")
 
 # The filename for the dynamic library for this GDExtension.
 # $SHLIBPREFIX is a platform specific prefix for the dynamic library ('lib' on Unix, '' on Windows).

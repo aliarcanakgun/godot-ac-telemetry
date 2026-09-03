@@ -2,6 +2,7 @@
 
 #include "sim_provider.h"
 #include "acc_data_structs.h"
+#include "telemetry_file.h"
 #include <godot_cpp/classes/node.hpp>
 #include <thread>
 #include <atomic>
@@ -59,8 +60,10 @@ private:
     std::thread logging_thread;
     std::mutex data_mutex;
 
+    bool zstd_compression_enabled = true;
+
     void logging_loop();
-    String _open_session_file(const String& file_path, std::ifstream& infile, ACC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets);
+    String _open_session_file(const String& file_path, TelemetryFile& infile, ACC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets);
     Dictionary _calculate_session_metadata(const ACC_SPageStatic& stat, uint64_t count, std::vector<ACC_LapDataChannels>& laps);
     Dictionary _static_to_dict(const ACC_SPageStatic &s);
     Dictionary _lap_to_dict(const ACC_LapDataChannels& c);
@@ -95,6 +98,9 @@ public:
     virtual void set_sample_interval(double interval) override { if (!is_logging) sample_interval = interval; }
     virtual void set_samples_per_meter(double spm) override { if (!is_logging) samples_per_meter = spm; }
     virtual godot::String get_save_file_signature() const override { return save_file_signature; }
+    
+    virtual void set_zstd_compression_enabled(bool enabled) override { zstd_compression_enabled = enabled; }
+    virtual bool is_zstd_compression_enabled() const override { return zstd_compression_enabled; }
 
     virtual godot::String load_session(const godot::String& file_path) override;
     virtual void close_session() override;

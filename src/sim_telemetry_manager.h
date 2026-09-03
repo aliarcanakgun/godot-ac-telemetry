@@ -21,6 +21,7 @@ private:
     // properties
     double sample_interval = 0.02;
     double samples_per_meter = 1.0;
+    bool zstd_compression_enabled = true;
 
     ISimProvider* _get_provider_for_signature(const String& sig);
     ISimProvider* _create_provider(const String& sim_id);
@@ -95,6 +96,13 @@ public:
         if (active_provider) return active_provider->get_save_file_signature();
         return "";
     }
+    
+    void set_zstd_compression_enabled(bool enabled);
+    bool is_zstd_compression_enabled() const;
+    
+    bool is_file_compressed(const String& file_path);
+    bool zstd_compress_file(const String& file_path);
+    void zstd_compress_file_async(const String& file_path);
 
     // utils
     Vector2 get_array_min_max(const Variant& arr);

@@ -4,7 +4,7 @@
 #include "driving_analyzer.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
-#include <fstream>
+#include "telemetry_file.h"
 #include <cmath>
 #include <windows.h>
 
@@ -90,15 +90,23 @@ void SimTelemetryManager::_bind_methods() {
 
     ClassDB::add_signal("SimTelemetryManager", MethodInfo("connection_lost"));
     ClassDB::add_signal("SimTelemetryManager", MethodInfo("session_auto_saved", PropertyInfo(Variant::STRING, "file_path")));
+    ClassDB::add_signal("SimTelemetryManager", MethodInfo("compression_finished", PropertyInfo(Variant::STRING, "file_path"), PropertyInfo(Variant::BOOL, "success")));
 
     ClassDB::bind_method(D_METHOD("get_sample_interval"), &SimTelemetryManager::get_sample_interval);
     ClassDB::bind_method(D_METHOD("set_sample_interval", "interval"), &SimTelemetryManager::set_sample_interval);
     ClassDB::bind_method(D_METHOD("get_samples_per_meter"), &SimTelemetryManager::get_samples_per_meter);
     ClassDB::bind_method(D_METHOD("set_samples_per_meter", "spm"), &SimTelemetryManager::set_samples_per_meter);
     ClassDB::bind_method(D_METHOD("get_save_file_signature"), &SimTelemetryManager::get_save_file_signature);
+    
+    ClassDB::bind_method(D_METHOD("set_zstd_compression_enabled", "enabled"), &SimTelemetryManager::set_zstd_compression_enabled);
+    ClassDB::bind_method(D_METHOD("is_zstd_compression_enabled"), &SimTelemetryManager::is_zstd_compression_enabled);
+    ClassDB::bind_method(D_METHOD("is_file_compressed", "file_path"), &SimTelemetryManager::is_file_compressed);
+    ClassDB::bind_method(D_METHOD("zstd_compress_file", "file_path"), &SimTelemetryManager::zstd_compress_file);
+    ClassDB::bind_method(D_METHOD("zstd_compress_file_async", "file_path"), &SimTelemetryManager::zstd_compress_file_async);
 
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sample_interval"), "set_sample_interval", "get_sample_interval");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "samples_per_meter"), "set_samples_per_meter", "get_samples_per_meter");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "zstd_compression_enabled"), "set_zstd_compression_enabled", "is_zstd_compression_enabled");
 }
 
 ISimProvider* SimTelemetryManager::_create_provider(const String& sim_id) {
@@ -113,6 +121,7 @@ ISimProvider* SimTelemetryManager::_create_provider(const String& sim_id) {
         provider->set_auto_save_callback([this](String path) {
             this->call_deferred("emit_signal", "session_auto_saved", path);
         });
+        provider->set_zstd_compression_enabled(zstd_compression_enabled);
     }
     
     return provider;
@@ -123,8 +132,8 @@ String SimTelemetryManager::_detect_file_signature(const String& file_path) {
     if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }
-    std::ifstream infile(os_path.utf8().get_data(), std::ios::binary);
-    if (!infile.is_open()) return "";
+    TelemetryFile infile;
+    if (!infile.open_read(os_path)) return "";
 
     char sig[5] = {0};
     infile.read(sig, 4);
@@ -247,11 +256,8 @@ String SimTelemetryManager::load_session_data(const String& file_path) {
         os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
     }
     
-    CharString cs = os_path.utf8();
-    std::string path(cs.get_data(), cs.length());
-    std::ifstream infile(path, std::ios::binary);
-    
-    if (!infile.is_open()) return "could not open file: " + os_path;
+    TelemetryFile infile;
+    if (!infile.open_read(os_path)) return "could not open file: " + os_path;
     
     char sig[4];
     infile.read(sig, 4);
@@ -306,6 +312,85 @@ double SimTelemetryManager::get_loaded_session_sample_interval() {
         return active_provider->get_loaded_session_sample_interval();
     }
     return 0.0;
+}
+
+
+void SimTelemetryManager::set_zstd_compression_enabled(bool enabled) {
+    zstd_compression_enabled = enabled;
+    if (active_provider) {
+        active_provider->set_zstd_compression_enabled(enabled);
+    }
+}
+
+bool SimTelemetryManager::is_zstd_compression_enabled() const {
+    return zstd_compression_enabled;
+}
+
+bool SimTelemetryManager::is_file_compressed(const String& file_path) {
+    String os_path = file_path;
+    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
+        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+    }
+    
+    std::ifstream check(os_path.utf8().get_data(), std::ios::binary);
+    if (check.is_open()) {
+        check.seekg(4, std::ios::beg);
+        char sig[4];
+        check.read(sig, 4);
+        return (std::strncmp(sig, "ZST2", 4) == 0);
+    }
+    return false;
+}
+
+bool SimTelemetryManager::zstd_compress_file(const String& file_path) {
+    String os_path = file_path;
+    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
+        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+    }
+    
+    // check if it's already compressed
+    {
+        std::ifstream check(os_path.utf8().get_data(), std::ios::binary);
+        if (check.is_open()) {
+            check.seekg(4, std::ios::beg);
+            char sig[4];
+            check.read(sig, 4);
+            if (std::strncmp(sig, "ZST2", 4) == 0) return true;
+        }
+    }
+    
+    return TelemetryFile::compress_existing_file(os_path);
+}
+
+void SimTelemetryManager::zstd_compress_file_async(const String& file_path) {
+    String os_path = file_path;
+    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
+        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
+    }
+    
+    std::thread([this, os_path]() {
+        bool res = false;
+        
+        // check if it's already compressed
+        bool already_compressed = false;
+        {
+            std::ifstream check(os_path.utf8().get_data(), std::ios::binary);
+            if (check.is_open()) {
+                check.seekg(4, std::ios::beg);
+                char sig[4];
+                check.read(sig, 4);
+                if (std::strncmp(sig, "ZST2", 4) == 0) already_compressed = true;
+            }
+        }
+        
+        if (already_compressed) {
+            res = true;
+        } else {
+            res = TelemetryFile::compress_existing_file(os_path);
+        }
+        
+        this->call_deferred("emit_signal", "compression_finished", os_path, res);
+    }).detach();
 }
 
 double SimTelemetryManager::get_loaded_session_samples_per_meter() {

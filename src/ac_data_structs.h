@@ -6,6 +6,7 @@
 #include <istream>
 #include <array>
 #include <cstdint>
+#include "telemetry_file.h"
 
 // assetto corsa status and types
 typedef int AC_STATUS;
@@ -396,12 +397,12 @@ struct AC_LapDataChannels {
         surfaceGrip.clear(); mandatoryPitDone.clear(); windSpeed.clear(); windDirection.clear();
     }
 
-    void write_to_stream(std::ostream& out) const {
+    void write_to_stream(TelemetryFile& out) const {
         uint64_t lap_size = timestamp.size();
-        out.write(reinterpret_cast<const char*>(&lap_size), sizeof(lap_size));
+        out.write(&lap_size, sizeof(lap_size));
         if (lap_size == 0) return;
 
-        #define WRITE_CHAN(vec) out.write(reinterpret_cast<const char*>(vec.data()), lap_size * sizeof(vec[0]))
+        #define WRITE_CHAN(vec) out.write(vec.data(), lap_size * sizeof(vec[0]))
         WRITE_CHAN(timestamp); WRITE_CHAN(packetId_graphic); WRITE_CHAN(iCurrentTime); WRITE_CHAN(iLastTime); WRITE_CHAN(iBestTime); WRITE_CHAN(normalizedCarPosition); WRITE_CHAN(distanceTraveled);
         WRITE_CHAN(replayTimeMultiplier); WRITE_CHAN(numberOfLaps); WRITE_CHAN(completedLaps);
         WRITE_CHAN(currentTime); WRITE_CHAN(lastTime); WRITE_CHAN(bestTime); WRITE_CHAN(split); WRITE_CHAN(tyreCompound);
@@ -460,13 +461,13 @@ struct AC_LapDataChannels {
         #undef WRITE_CHAN
     }
 
-    void read_from_stream(std::istream& in) {
+    void read_from_stream(TelemetryFile& in) {
         clear();
         uint64_t lap_size = 0;
-        in.read(reinterpret_cast<char*>(&lap_size), sizeof(lap_size));
+        in.read(&lap_size, sizeof(lap_size));
         if (lap_size == 0) return;
 
-        #define READ_CHAN(vec) vec.resize(lap_size); in.read(reinterpret_cast<char*>(vec.data()), lap_size * sizeof(vec[0]))
+        #define READ_CHAN(vec) vec.resize(lap_size); in.read(vec.data(), lap_size * sizeof(vec[0]))
         READ_CHAN(timestamp); READ_CHAN(packetId_graphic); READ_CHAN(iCurrentTime); READ_CHAN(iLastTime); READ_CHAN(iBestTime); READ_CHAN(normalizedCarPosition); READ_CHAN(distanceTraveled);
         READ_CHAN(replayTimeMultiplier); READ_CHAN(numberOfLaps); READ_CHAN(completedLaps);
         READ_CHAN(currentTime); READ_CHAN(lastTime); READ_CHAN(bestTime); READ_CHAN(split); READ_CHAN(tyreCompound);

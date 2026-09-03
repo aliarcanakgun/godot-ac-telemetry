@@ -1,7 +1,6 @@
 #include "ac_provider.h"
 #include "helper.h"
 #include <godot_cpp/classes/project_settings.hpp>
-#include <fstream>
 #include <cmath>
 #include <windows.h>
 #include <map>
@@ -159,7 +158,7 @@ String ACProvider::stop_capture(const String& output_file_path) {
     int current_count = ++session_type_counts[dataGraphic->session];
     String session_suffix = _get_session_suffix(dataGraphic->session);
     if (current_count > 1) {
-        session_suffix += "_" + String::num(current_count);
+        session_suffix += "_" + String::num_int64(current_count);
     }
 
     String extension = output.get_extension();
@@ -171,7 +170,12 @@ String ACProvider::stop_capture(const String& output_file_path) {
     
     AC_SPageStatic static_copy = *dataStatic;
 
-    _flush_sessions_to_disk(std::move(data_to_save), static_copy, sample_interval, samples_per_meter, final_path);
+    double s_interval = sample_interval;
+    double s_spm = samples_per_meter;
+    
+    std::thread([this, data_to_save = std::move(data_to_save), static_copy, s_interval, s_spm, final_path]() mutable {
+        this->_flush_sessions_to_disk(std::move(data_to_save), static_copy, s_interval, s_spm, final_path);
+    }).detach();
 
     return final_path;
 }
@@ -213,25 +217,25 @@ void ACProvider::_flush_sessions_to_disk(std::vector<AC_LapDataChannels> data_to
     CharString cs = os_path.utf8();
     std::string std_path(cs.get_data(), cs.length());
 
-    std::ofstream outfile(std_path, std::ios::binary);
-    if (!outfile.is_open()) return;
+    TelemetryFile outfile;
+    if (!outfile.open_write()) return;
 
     CharString utf8_signature = save_file_signature.utf8();
     outfile.write(utf8_signature.get_data(), utf8_signature.length());
     if (outfile.fail()) { outfile.close(); return; }
 
-    outfile.write(reinterpret_cast<const char*>(&static_data_copy), sizeof(AC_SPageStatic));
+    outfile.write(&static_data_copy, sizeof(AC_SPageStatic));
     if (outfile.fail()) { outfile.close(); return; }
 
-    outfile.write(reinterpret_cast<const char*>(&save_interval), sizeof(double));
-    outfile.write(reinterpret_cast<const char*>(&save_spm), sizeof(double));
+    outfile.write(&save_interval, sizeof(double));
+    outfile.write(&save_spm, sizeof(double));
 
     uint64_t total_laps = data_to_save.size();
-    outfile.write(reinterpret_cast<const char*>(&total_laps), sizeof(total_laps));
+    outfile.write(&total_laps, sizeof(total_laps));
 
-    std::streampos offsets_pos = outfile.tellp();
+    uint64_t offsets_pos = outfile.tellp();
     std::vector<uint64_t> lap_offsets(total_laps, 0);
-    outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
+    outfile.write(lap_offsets.data(), total_laps * sizeof(uint64_t));
 
     for (uint64_t idx = 0; idx < data_to_save.size(); ++idx) {
         lap_offsets[idx] = outfile.tellp();
@@ -239,9 +243,9 @@ void ACProvider::_flush_sessions_to_disk(std::vector<AC_LapDataChannels> data_to
     }
 
     outfile.seekp(offsets_pos);
-    outfile.write(reinterpret_cast<const char*>(lap_offsets.data()), total_laps * sizeof(uint64_t));
+    outfile.write(lap_offsets.data(), total_laps * sizeof(uint64_t));
 
-    outfile.close();
+    outfile.close_and_save(os_path, zstd_compression_enabled);
 }
 
 bool ACProvider::is_logging_active() const {
@@ -465,7 +469,7 @@ Dictionary ACProvider::get_session_metadata_from_file(const String& file_path) {
     loaded_session_data.clear();
     loaded_session_lap_offsets.clear();
 
-    std::ifstream infile;
+    TelemetryFile infile;
     uint64_t count = 0;
     String err = _open_session_file(file_path, infile, loaded_session_static_data, loaded_session_sample_interval, loaded_session_samples_per_meter, count, loaded_session_lap_offsets);
     if (!err.is_empty()) return Dictionary();
@@ -741,19 +745,10 @@ String ACProvider::get_internal_channel_name(const String& standard_name) {
     return standard_name; // fallback
 }
 
-String ACProvider::_open_session_file(const String& file_path, std::ifstream& infile, AC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets) {
+String ACProvider::_open_session_file(const String& file_path, TelemetryFile& infile, AC_SPageStatic& out_static, double& out_sample_interval, double& out_samples_per_meter, uint64_t& out_lap_count, std::vector<uint64_t>& out_lap_offsets) {
     if (file_path.is_empty()) return "file path is empty";
 
-    String os_path = file_path;
-    if (os_path.begins_with("res://") || os_path.begins_with("user://")) {
-        os_path = ProjectSettings::get_singleton()->globalize_path(os_path);
-    }
-
-    CharString cs = os_path.utf8();
-    std::string path(cs.get_data(), cs.length());
-    
-    infile.open(path, std::ios::binary);
-    if (!infile.is_open()) return "could not open file: " + os_path;
+    if (!infile.open_read(file_path)) return "could not open file: " + file_path;
 
     // check signature
     int sig_len = save_file_signature.utf8().length();
@@ -767,29 +762,34 @@ String ACProvider::_open_session_file(const String& file_path, std::ifstream& in
     }
 
     // read static data
-    if (infile.read(reinterpret_cast<char*>(&out_static), sizeof(AC_SPageStatic)).fail()) {
+    infile.read(&out_static, sizeof(AC_SPageStatic));
+    if (infile.fail()) {
         infile.close(); return "failed reading static data";
     }
     
     // read sample interval
-    if (infile.read(reinterpret_cast<char*>(&out_sample_interval), sizeof(double)).fail()) {
+    infile.read(&out_sample_interval, sizeof(double));
+    if (infile.fail()) {
         infile.close(); return "failed reading sample interval";
     }
     
     // read samples per meter
-    if (infile.read(reinterpret_cast<char*>(&out_samples_per_meter), sizeof(double)).fail()) {
+    infile.read(&out_samples_per_meter, sizeof(double));
+    if (infile.fail()) {
         infile.close(); return "failed reading samples per meter";
     }
 
     // read total laps count
-    if (infile.read(reinterpret_cast<char*>(&out_lap_count), sizeof(uint64_t)).fail()) {
+    infile.read(&out_lap_count, sizeof(uint64_t));
+    if (infile.fail()) {
         infile.close(); return "failed reading lap count";
     }
     
     // read lap offsets
     out_lap_offsets.resize(out_lap_count);
     if (out_lap_count > 0) {
-        if (infile.read(reinterpret_cast<char*>(out_lap_offsets.data()), out_lap_count * sizeof(uint64_t)).fail()) {
+        infile.read(out_lap_offsets.data(), out_lap_count * sizeof(uint64_t));
+        if (infile.fail()) {
             infile.close(); return "failed reading lap offsets";
         }
     }
@@ -1138,7 +1138,7 @@ void ACProvider::logging_loop() {
                     int current_count = ++session_type_counts[current_session_type];
                     String session_suffix = _get_session_suffix(current_session_type);
                     if (current_count > 1) {
-                        session_suffix += "_" + String::num(current_count);
+                        session_suffix += "_" + String::num_int64(current_count);
                     }
 
                     String output = session_output_file_path;
@@ -1589,7 +1589,7 @@ String ACProvider::load_session(const String& file_path) {
     loaded_session_data.clear();
     loaded_session_lap_offsets.clear();
 
-    std::ifstream infile;
+    TelemetryFile infile;
     uint64_t count = 0;
     String err = _open_session_file(file_path, infile, loaded_session_static_data, loaded_session_sample_interval, loaded_session_samples_per_meter, count, loaded_session_lap_offsets);
     if (!err.is_empty()) return err;
@@ -1789,7 +1789,7 @@ Dictionary ACProvider::calculate_lap_time_delta(const String& target_file_path, 
     double session_spm = 1.0;
 
     auto load_lap = [this, &session_spm](String file_path, int lap_index, AC_LapDataChannels &out_lap) -> bool {
-        std::ifstream infile;
+        TelemetryFile infile;
         AC_SPageStatic stat;
         double interval, spm;
         uint64_t count;

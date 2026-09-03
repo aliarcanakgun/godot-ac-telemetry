@@ -3,6 +3,10 @@
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/vector3.hpp>
+#include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/vector3.hpp>
 #include <vector>
 #include <array>
 #include <windows.h>
@@ -23,6 +27,22 @@ inline godot::PackedFloat32Array to_float_array(const std::vector<T>& vec) {
         ptr[i] = static_cast<float>(vec[i]);
     }
     return arr;
+}
+
+template<size_t N>
+inline godot::Array to_vector3_array(const std::vector<std::array<std::array<float, 3>, N>>& vec) {
+    godot::Array out_array;
+    out_array.resize(vec.size());
+    for (size_t i = 0; i < vec.size(); ++i) {
+        godot::PackedVector3Array inner_arr;
+        inner_arr.resize(N);
+        godot::Vector3* ptr = inner_arr.ptrw();
+        for (size_t j = 0; j < N; ++j) {
+            ptr[j] = godot::Vector3(vec[i][j][0], vec[i][j][1], vec[i][j][2]);
+        }
+        out_array[i] = inner_arr;
+    }
+    return out_array;
 }
 
 template<typename T>

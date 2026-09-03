@@ -7,6 +7,7 @@
 #include <istream>
 #include <array>
 #include <cstdint>
+#include "telemetry_file.h"
 
 // ensure 4-byte alignment to match assetto corsa memory layout
 #pragma pack(push, 4)
@@ -341,13 +342,13 @@ struct ACC_LapDataChannels : public AC_LapDataChannels {
         currentTyreSet.clear(); strategyTyreSet.clear(); gapAhead.clear(); gapBehind.clear();
     }
 
-    void write_to_stream(std::ostream& out) const {
+    void write_to_stream(TelemetryFile& out) const {
         AC_LapDataChannels::write_to_stream(out);
         
         uint64_t lap_size = timestamp.size();
         if (lap_size == 0) return;
 
-        #define WRITE_CHAN(vec) out.write(reinterpret_cast<const char*>(vec.data()), lap_size * sizeof(vec[0]))
+        #define WRITE_CHAN(vec) out.write(vec.data(), lap_size * sizeof(vec[0]))
         WRITE_CHAN(mz_FL); WRITE_CHAN(mz_FR); WRITE_CHAN(mz_RL); WRITE_CHAN(mz_RR);
         WRITE_CHAN(fx_FL); WRITE_CHAN(fx_FR); WRITE_CHAN(fx_RL); WRITE_CHAN(fx_RR);
         WRITE_CHAN(fy_FL); WRITE_CHAN(fy_FR); WRITE_CHAN(fy_RL); WRITE_CHAN(fy_RR);
@@ -390,13 +391,13 @@ struct ACC_LapDataChannels : public AC_LapDataChannels {
         #undef WRITE_CHAN
     }
 
-    void read_from_stream(std::istream& in) {
+    void read_from_stream(TelemetryFile& in) {
         AC_LapDataChannels::read_from_stream(in);
         
         uint64_t lap_size = timestamp.size();
         if (lap_size == 0) return;
 
-        #define READ_CHAN(vec) vec.resize(lap_size); in.read(reinterpret_cast<char*>(vec.data()), lap_size * sizeof(vec[0]))
+        #define READ_CHAN(vec) vec.resize(lap_size); in.read(vec.data(), lap_size * sizeof(vec[0]))
         READ_CHAN(mz_FL); READ_CHAN(mz_FR); READ_CHAN(mz_RL); READ_CHAN(mz_RR);
         READ_CHAN(fx_FL); READ_CHAN(fx_FR); READ_CHAN(fx_RL); READ_CHAN(fx_RR);
         READ_CHAN(fy_FL); READ_CHAN(fy_FR); READ_CHAN(fy_RL); READ_CHAN(fy_RR);
