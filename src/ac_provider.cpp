@@ -806,6 +806,14 @@ Dictionary ACProvider::_calculate_session_metadata(const AC_SPageStatic& stat, u
     meta["car_name"] = wchar_to_gdstring(stat.carModel, 33);
     meta["total_laps"] = (int)count;
     meta["sector_count"] = stat.sectorCount;
+    
+    meta["session_type"] = -1;
+    for (uint64_t i = 0; i < count; i++) {
+        if (!laps[i].session.empty()) {
+            meta["session_type"] = laps[i].session[0];
+            break;
+        }
+    }
 
     Array laps_arr;
     int best_lap_time = 0;

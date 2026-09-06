@@ -1,7 +1,8 @@
 #pragma once
 
-// ACStatusType will not be used bcz the telemetry will be recorded when only the game is not paused
-// if you're going to create a live telemetry or something else, you need to edit _process() in ac_telemetry.cpp and fill_from_snapshot() in gd_telemetry_snapshot.cpp
+// SimStatusType is mostly unused because telemetry is only recorded
+// when the game is live. it's kept here in case someone
+// converts the telemetry structure to time-based.
 enum SimStatusType {
     STATUS_OFF = 0,
     STATUS_REPLAY = 1,
@@ -17,7 +18,9 @@ enum SimSessionType {
     SESSION_HOTLAP = 3,
     SESSION_TIME_ATTACK = 4,
     SESSION_DRIFT = 5,
-    SESSION_DRAG = 6
+    SESSION_DRAG = 6,
+    SESSION_HOTSTINT = 7,
+    SESSION_HOTSTINT_SUPERPOLE = 8
 };
 
 enum SimFlagType {
@@ -27,7 +30,9 @@ enum SimFlagType {
     FLAG_BLACK = 3,
     FLAG_WHITE = 4,
     FLAG_CHECKERED = 5,
-    FLAG_PENALTY = 6
+    FLAG_PENALTY = 6,
+    FLAG_GREEN = 7,
+    FLAG_ORANGE = 8
 };
 
 enum DrivingMistakeType {
@@ -44,4 +49,4 @@ enum DrivingMistakeType {
     MISTAKE_LOSS_OF_CONTROL = 10,
     MISTAKE_DRIFT = 11,
     MISTAKE_MINOR_OVERSTEER = 12
-};
+};
